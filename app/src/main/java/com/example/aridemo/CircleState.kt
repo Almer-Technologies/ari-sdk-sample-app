@@ -1,0 +1,139 @@
+package com.example.aridemo
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * The circles on screen, shared between [MainActivity] and [AriToolService].
+ *
+ * **Numbers are stable for the life of a circle.** Circle 3 stays circle 3 until
+ * it is removed, and removing it leaves a gap — the remaining circles keep their
+ * numbers rather than shifting down.
+ *
+ * That matters more than it looks. Ari resolves "remove the purple ones" by
+ * listing the circles and then issuing one removal per match, often *before* the
+ * first result comes back. With positional numbering, every removal after the
+ * first would target a number that had already shifted, and the wrong circle
+ * would go. Stable numbers make a batch of removals safe by construction.
+ *
+ * Process-wide singleton because the tool service and the UI are separate
+ * components in the same process. A production app would hold this in a
+ * repository injected into both, and persist it — see the README.
+ */
+object CircleState {
+
+    /** Most circles that fit legibly on a headset screen. Caps count, not numbers. */
+    const val MAX_CIRCLES = 6
+
+    private const val DEFAULT_COLOR = "red"
+
+    /**
+     * Colours Ari may pick.
+     *
+     * Must stay in step with the `values` attribute of BOTH `color` args in
+     * `res/xml/ari_tools.xml` — that declaration is what constrains the model,
+     * this map is what actually resolves the name. A name here but not there is
+     * unreachable; a name there but not here makes Ari offer a colour the app
+     * then rejects.
+     *
+     * `grey` and `gray` both map to the same colour on purpose: speech-to-text
+     * will produce either, and the model can only pick from this list.
+     */
+    private val NAMED = mapOf(
+        "red" to Color.Red,
+        "green" to Color(0xFF00A000),
+        "blue" to Color.Blue,
+        "yellow" to Color.Yellow,
+        "purple" to Color(0xFF800080),
+        "orange" to Color(0xFFFF8000),
+        "pink" to Color(0xFFFF69B4),
+        "cyan" to Color(0xFF00BCD4),
+        "brown" to Color(0xFF8B4513),
+        "black" to Color.Black,
+        "white" to Color.White,
+        "grey" to Color(0xFF9E9E9E),
+        "gray" to Color(0xFF9E9E9E),
+    )
+
+    /** One circle. [number] is assigned once and never changes. */
+    data class Circle(val number: Int, val colorName: String)
+
+    private val nextNumber = AtomicInteger(2)
+    private val _circles = MutableStateFlow(listOf(Circle(1, DEFAULT_COLOR)))
+
+    /** Circles in display order. Numbers are stable and may have gaps. */
+    val circles: StateFlow<List<Circle>> = _circles
+
+    /** How many circles are on screen. */
+    val count: Int get() = _circles.value.size
+
+    /** The numbers currently in use, in display order — for error messages. */
+    fun activeNumbers(): List<Int> = _circles.value.map { it.number }
+
+    /** Colour names this app accepts, for error messages. */
+    fun supportedNames(): List<String> = NAMED.keys.toList()
+
+    /** Resolve a declared colour name, or `null` if it isn't one we know. */
+    fun colorOf(name: String): Color? = NAMED[name.lowercase().trim()]
+
+    /**
+     * Black or white, whichever stays readable on [background].
+     *
+     * Needed once the palette includes white and yellow: the circle's number is
+     * drawn on top of it, and a fixed white would disappear on both.
+     */
+    fun contrastingTextColor(background: Color): Color =
+        if (background.luminance() > 0.5f) Color.Black else Color.White
+
+    /**
+     * Append a circle with a fresh, never-reused number.
+     *
+     * @param colorName Colour for the new circle; must be a known name.
+     * @return The number assigned to it, or `null` when already at
+     *   [MAX_CIRCLES].
+     */
+    fun add(colorName: String): Int? {
+        if (count >= MAX_CIRCLES) return null
+        val number = nextNumber.getAndIncrement()
+        _circles.value = _circles.value + Circle(number, colorName.lowercase().trim())
+        return number
+    }
+
+    /**
+     * Remove one circle by number. Remaining circles keep their numbers.
+     *
+     * @param number The circle's stable number.
+     * @return `true` when removed, `false` when there is no such circle.
+     */
+    fun remove(number: Int): Boolean {
+        val remaining = _circles.value.filterNot { it.number == number }
+        if (remaining.size == count) return false
+        _circles.value = remaining
+        return true
+    }
+
+    /**
+     * Recolour one circle, or every circle.
+     *
+     * @param colorName Colour to apply; must be a known name.
+     * @param number The circle's stable number, or `null` for all of them.
+     * @return How many circles changed, or `null` when [number] names a circle
+     *   that does not exist.
+     */
+    fun setColor(colorName: String, number: Int?): Int? {
+        val name = colorName.lowercase().trim()
+        if (number == null) {
+            val changed = count
+            _circles.value = _circles.value.map { it.copy(colorName = name) }
+            return changed
+        }
+        if (_circles.value.none { it.number == number }) return null
+        _circles.value = _circles.value.map {
+            if (it.number == number) it.copy(colorName = name) else it
+        }
+        return 1
+    }
+}

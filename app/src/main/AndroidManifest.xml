@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          The Ari tool provider surface.
+
+          android:permission means ONLY Ari can bind this service. The
+          permission is defined by the Ari app at signature|privileged
+          protection level, so no other app on the device can reach it — which
+          matters because an LLM-invoked action carries arguments, unlike a
+          WearHF phrase match.
+
+          The meta-data resource is read by Ari at session connect without
+          starting this app, so tools work even if the app was never opened.
+        -->
+        <service
+            android:name=".AriToolService"
+            android:exported="true"
+            android:permission="com.ari_os.ari.permission.BIND_TOOL_PROVIDER">
+            <intent-filter>
+                <action android:name="com.ari_os.ari.action.TOOL_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="com.ari_os.ari.tools"
+                android:resource="@xml/ari_tools" />
+        </service>
+
+    </application>
+</manifest>

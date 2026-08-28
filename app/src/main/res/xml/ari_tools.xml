@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What this app can do, as far as Ari is concerned.
+
+  Ari reads this file through PackageManager at session start — without
+  launching the app — so these tools work even if the app has never been opened.
+
+  `description` is read by the language model, so write it for a reader who
+  cannot see the screen. Say what the tool does and what the argument means;
+  the model picks the tool from this text alone.
+
+  Every description here states that circle numbers are permanent and can have
+  gaps. That is deliberate: without it the model assumes numbers run 1..N and
+  guesses wrong after a removal.
+-->
+<ari-tools apiVersion="1">
+
+    <!--
+      The "call once" wording is deliberate. This tool is not idempotent, so a
+      repeated call adds a second circle the user never asked for — and small
+      models do sometimes regenerate a turn and re-issue their tool call. The
+      description is the cheapest lever on that.
+    -->
+    <tool
+        name="add_circle"
+        description="Adds exactly one circle and returns the permanent number assigned to it. Call this once per circle the user asked for; do not repeat the call after it succeeds. Fails if 6 circles already exist."
+        confirm="false">
+        <arg
+            name="color"
+            type="enum"
+            values="red,green,blue,yellow,purple,orange,pink,cyan,brown,black,white,grey,gray"
+            required="false"
+            description="Colour for the new circle. Defaults to red if not given." />
+    </tool>
+
+    <!--
+      confirm="true" makes Ari ask the user before running this. Use it for
+      anything destructive — removal cannot be undone here.
+    -->
+    <tool
+        name="remove_circle"
+        description="Removes the circle with this number. Other circles keep their own numbers, so it is safe to remove several circles in one go using the numbers from a single list_circles call."
+        confirm="true">
+        <arg
+            name="number"
+            type="int"
+            required="true"
+            description="The circle's permanent number, as shown on it and reported by list_circles. Not a position, so do not assume the circles are numbered 1 upwards." />
+    </tool>
+
+    <!--
+      `number` optional: omitted means every circle. That keeps the simple
+      phrasing ("change the colour to blue") working when there is only one.
+    -->
+    <tool
+        name="set_circle_color"
+        description="Changes the colour of one circle by its number, or of every circle if no number is given."
+        confirm="false">
+        <arg
+            name="color"
+            type="enum"
+            values="red,green,blue,yellow,purple,orange,pink,cyan,brown,black,white,grey,gray"
+            required="true"
+            description="The colour to change to." />
+        <arg
+            name="number"
+            type="int"
+            required="false"
+            description="The circle's permanent number. Leave out to recolour all of them." />
+    </tool>
+
+    <!--
+      No args. Ari cannot see the screen, so this is how it answers questions
+      about what is displayed, and how it maps a colour back to a number before
+      removing or recolouring.
+    -->
+    <tool
+        name="list_circles"
+        description="Reports every circle on screen with its permanent number and colour. Numbers can have gaps. Call this first whenever the user refers to a circle by colour or position rather than by number."
+        confirm="false" />
+
+</ari-tools>
