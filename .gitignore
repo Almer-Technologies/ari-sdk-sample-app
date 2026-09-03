@@ -4,3 +4,7 @@ local.properties
 .idea/
 *.iml
 .kotlin/
+
+# Zeus worktree symlinks
+/zeus
+/.zeus
