@@ -1,0 +1,87 @@
+{
+  "package": "com.example.aridemo",
+  "declarationVersion": 1,
+  "tools": [
+    {
+      "name": "add_circle",
+      "description": "Adds exactly one circle and returns the permanent number assigned to it. Call this once per circle the user asked for; do not repeat the call after it succeeds. Fails if 6 circles already exist.",
+      "confirm": false,
+      "args": [
+        {
+          "name": "color",
+          "type": "enum",
+          "values": [
+            "red",
+            "green",
+            "blue",
+            "yellow",
+            "purple",
+            "orange",
+            "pink",
+            "cyan",
+            "brown",
+            "black",
+            "white",
+            "grey",
+            "gray"
+          ],
+          "required": false,
+          "description": "Colour for the new circle. Defaults to red if not given."
+        }
+      ]
+    },
+    {
+      "name": "remove_circle",
+      "description": "Removes the circle with this number. Other circles keep their own numbers, so it is safe to remove several circles in one go using the numbers from a single list_circles call.",
+      "confirm": true,
+      "args": [
+        {
+          "name": "number",
+          "type": "int",
+          "required": true,
+          "description": "The circle's permanent number, as shown on it and reported by list_circles. Not a position, so do not assume the circles are numbered 1 upwards."
+        }
+      ]
+    },
+    {
+      "name": "set_circle_color",
+      "description": "Changes the colour of one circle by its number, or of every circle if no number is given.",
+      "confirm": false,
+      "args": [
+        {
+          "name": "color",
+          "type": "enum",
+          "values": [
+            "red",
+            "green",
+            "blue",
+            "yellow",
+            "purple",
+            "orange",
+            "pink",
+            "cyan",
+            "brown",
+            "black",
+            "white",
+            "grey",
+            "gray"
+          ],
+          "required": true,
+          "description": "The colour to change to."
+        },
+        {
+          "name": "number",
+          "type": "int",
+          "required": false,
+          "description": "The circle's permanent number. Leave out to recolour all of them."
+        }
+      ]
+    },
+    {
+      "name": "list_circles",
+      "description": "Reports every circle on screen with its permanent number and colour. Numbers can have gaps. Call this first whenever the user refers to a circle by colour or position rather than by number.",
+      "confirm": false,
+      "args": []
+    }
+  ]
+}

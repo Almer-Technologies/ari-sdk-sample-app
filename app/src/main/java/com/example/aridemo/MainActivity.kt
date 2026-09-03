@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  *
  * Deliberately a static list, always on screen: a demo viewer should be able to
  * see what to say without being coached. Each entry is a phrase that really
- * works — keep it in step with `res/xml/ari_tools.xml`, since that declaration
+ * works — keep it in step with `assets/ari_tools.json`, since that declaration
  * is what Ari actually exposes to the model.
  */
 private val VOICE_COMMANDS = listOf(

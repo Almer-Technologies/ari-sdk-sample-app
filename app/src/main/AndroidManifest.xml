@@ -24,8 +24,11 @@
           matters because an LLM-invoked action carries arguments, unlike a
           WearHF phrase match.
 
-          The meta-data resource is read by Ari at session connect without
-          starting this app, so tools work even if the app was never opened.
+          Nothing here points at the declaration. The `assets/ari_tools.json`
+          asset is read by Ari at session connect without starting this app, so
+          tools work even if the app was never opened. The path is fixed on
+          purpose: a manifest-supplied path would still compile with a typo and
+          then drop the provider at runtime, silently.
         -->
         <service
             android:name=".AriToolService"
@@ -34,9 +37,6 @@
             <intent-filter>
                 <action android:name="com.ari_os.ari.action.TOOL_PROVIDER" />
             </intent-filter>
-            <meta-data
-                android:name="com.ari_os.ari.tools"
-                android:resource="@xml/ari_tools" />
         </service>
 
     </application>

@@ -13,8 +13,15 @@ import kotlinx.serialization.json.put
 /**
  * Exposes this app's capabilities to Ari.
  *
- * Declared in `res/xml/ari_tools` and published via the manifest service entry.
- * Ari discovers it at session connect without launching the app.
+ * Declared in `assets/ari_tools.json` and published via the manifest service
+ * entry. Ari reads that asset straight out of the installed APK at session
+ * connect — no IPC, and this app is never launched for it — so the tools work
+ * even if it has never been opened.
+ *
+ * Each tool's `description` in that file is read by the language model, so it
+ * is written for a reader who cannot see the screen: it says what the tool
+ * does and what the argument means, because the model picks the tool from that
+ * text alone.
  *
  * This class is the entire integration surface — everything else is ordinary
  * app code.
@@ -30,6 +37,14 @@ class AriToolService : AriToolProviderService() {
             else -> AriToolResult.error("This app has no tool called '$tool'.")
         }
 
+    /**
+     * The declared description tells the model to "call this once per circle
+     * ... do not repeat the call after it succeeds". That wording is
+     * deliberate. This tool is not idempotent, so a repeated call adds a
+     * second circle the user never asked for — and small models do sometimes
+     * regenerate a turn and re-issue their tool call. The description is the
+     * cheapest lever on that.
+     */
     private fun addCircle(args: JsonObject): AriToolResult {
         val color = args.optionalString("color") ?: "red"
         if (CircleState.colorOf(color) == null) return unknownColor(color)
@@ -42,6 +57,11 @@ class AriToolService : AriToolProviderService() {
         return AriToolResult.ok("number" to number, "color" to color, "total" to CircleState.count)
     }
 
+    /**
+     * The only tool declared with `"confirm": true`, which makes Ari ask the
+     * user before running it. Use that for anything destructive — removal
+     * cannot be undone here.
+     */
     private fun removeCircle(args: JsonObject): AriToolResult {
         val number = args.optionalInt("number")
             ?: return AriToolResult.error("Tell me which circle number to remove.")
@@ -50,6 +70,11 @@ class AriToolService : AriToolProviderService() {
         return AriToolResult.ok("removed" to number, "total" to CircleState.count)
     }
 
+    /**
+     * `number` is declared `"required": false` on purpose: omitted means every
+     * circle. That keeps the simple phrasing ("change the colour to blue")
+     * working when there is only one.
+     */
     private fun setCircleColor(args: JsonObject): AriToolResult {
         val color = args.optionalString("color")
             ?: return AriToolResult.error("Tell me which colour to use.")
@@ -63,6 +88,11 @@ class AriToolService : AriToolProviderService() {
         return AriToolResult.ok("color" to color, "changed" to changed)
     }
 
+    /**
+     * Declared with an empty `args` array. Ari cannot see the screen, so this
+     * is how it answers questions about what is displayed, and how it maps a
+     * colour back to a number before removing or recolouring.
+     */
     private fun listCircles(): AriToolResult {
         val circles = CircleState.circles.value
         // Keyed by the circle's permanent number: the model reads this back to

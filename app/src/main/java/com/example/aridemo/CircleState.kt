@@ -33,8 +33,8 @@ object CircleState {
     /**
      * Colours Ari may pick.
      *
-     * Must stay in step with the `values` attribute of BOTH `color` args in
-     * `res/xml/ari_tools.xml` — that declaration is what constrains the model,
+     * Must stay in step with the `values` array of BOTH `color` args in
+     * `assets/ari_tools.json` — that declaration is what constrains the model,
      * this map is what actually resolves the name. A name here but not there is
      * unreachable; a name there but not here makes Ari offer a colour the app
      * then rejects.
