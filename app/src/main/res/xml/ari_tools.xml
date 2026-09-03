@@ -13,7 +13,7 @@
   gaps. That is deliberate: without it the model assumes numbers run 1..N and
   guesses wrong after a removal.
 -->
-<ari-tools apiVersion="1">
+<ari-tools declarationVersion="1">
 
     <!--
       The "call once" wording is deliberate. This tool is not idempotent, so a

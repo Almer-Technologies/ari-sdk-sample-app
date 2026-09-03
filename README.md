@@ -118,7 +118,7 @@ Ari is already in a conversation, end and restart the conversation.
 | Ari says it can't change colours | Package not on the allowlist, or discovery ran before install. Restart the session. |
 | `SecurityException` on bind in logcat | The Ari app is missing `<uses-permission>` for its own `BIND_TOOL_PROVIDER`. Defining a permission does not grant it. |
 | `no com.ari_os.ari.tools resource` | Manifest `<meta-data>` missing or misnamed. |
-| `declaration version 0` | `apiVersion` missing from the `<ari-tools>` root element. |
+| `declaration version 0` | `declarationVersion` missing from the `<ari-tools>` root element. |
 
 Check discovery with:
 
