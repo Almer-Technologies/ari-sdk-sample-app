@@ -11,7 +11,7 @@ A minimal Android app that exposes four capabilities to Ari. Install it, then sa
 | Tool | Args | Notes |
 |---|---|---|
 | `add_circle` | `color?` | Appends a circle, returns its number. Defaults red. |
-| `remove_circle` | `number` | `"confirm": true` — Ari asks first. Other circles keep their numbers. |
+| `remove_circle` | `number` | `confirm = true` — Ari asks first. Other circles keep their numbers. |
 | `set_circle_color` | `color`, `number?` | Omit the number to recolour every circle. |
 | `list_circles` | none | How Ari answers "what's on screen?" — it can't see the display. |
 
@@ -31,7 +31,7 @@ looks identical to once. `add_circle` is not, so when the language model
 occasionally regenerates a turn and repeats its tool call, you get a circle you
 never asked for. Same model flakiness, wildly different consequence. Where a tool
 must accumulate or destroy, say so in the description (see `add_circle`) and
-consider `"confirm": true`.
+consider `confirm = true`.
 
 **Ari narrates before it knows.** The model often says "adding it" before reading
 the tool result, so a failure can be spoken as a success. Return precise error
@@ -39,39 +39,109 @@ text — Ari reads it out — and don't rely on the user hearing the difference.
 
 ## How it works
 
-Three files, and you write all three:
+Two files, and you write both:
 
-1. **`app/src/main/assets/ari_tools.json`** declares the tools: each one's name,
-   a description the language model reads, and its typed arguments. The path is
-   **fixed** (`AriToolsContract.DECLARATION_ASSET`), so there is nothing to
-   point at and nothing to misspell.
+1. **`AriToolService.kt`** extends `AriToolProviderService` and overrides
+   `tools()`. It declares every tool **in code, next to the function that runs
+   it**, and that is the entire integration.
 2. **`app/src/main/AndroidManifest.xml`** publishes a service with the
    `com.ari_os.ari.action.TOOL_PROVIDER` action, protected by
    `com.ari_os.ari.permission.BIND_TOOL_PROVIDER` so only Ari can bind it. It
    holds **no pointer to the declaration** — a manifest-supplied path would
    still compile with a typo and then drop the provider at runtime, silently.
-3. **`AriToolService.kt`** extends `AriToolProviderService` and implements
-   `onInvoke`. That is the entire integration.
+
+**`app/src/main/assets/ari_tools.json` is generated, not written.**
+`AriToolsAsset.writeTo` encodes it from the same registry `tools()` returns, and
+a unit test fails the build if the committed file stops matching the code. The
+path is **fixed** (`AriToolsContract.DECLARATION_ASSET`), so there is nothing to
+point at and nothing to misspell.
+
+```bash
+./gradlew :app:testDebugUnitTest -Pari.writeToolsAsset   # regenerate, then commit
+./gradlew :app:testDebugUnitTest                         # check for drift
+```
 
 At session start Ari opens the asset straight out of this app's installed APK —
 `getResourcesForApplication(...).assets.open("ari_tools.json")`, so no IPC and
 no app launch — and tells the cloud the tools exist. When you ask for one, the
-call arrives over AIDL at `onInvoke`.
+call arrives over AIDL and the SDK dispatches it to the `handle { }` block
+declared with that tool.
 
 ## Declaring tools
 
-This app's own declaration, cut down to one tool and a shorter colour list —
-see `app/src/main/assets/ari_tools.json` for all four:
+One registry answers both questions Ari asks. This is the real thing, cut down
+to one tool — see `app/src/main/java/com/example/aridemo/AriToolService.kt` for
+all four:
+
+```kotlin
+class AriToolService : AriToolProviderService() {
+
+    private val registry = ariTools {
+        tool(
+            name = "set_circle_color",
+            description = "Changes the colour of one circle by its number, or of " +
+                "every circle if no number is given.",
+        ) {
+            enum(
+                "color",
+                values = CircleState.supportedNames(),
+                description = "The colour to change to.",
+                required = true,
+            )
+            int(
+                "number",
+                description = "The circle's permanent number. Leave out to recolour all of them.",
+            )
+            handle { args ->
+                setCircleColor(args.string("color"), args.intOrNull("number"))
+            }
+        }
+    }
+
+    override fun tools(): AriToolRegistry = registry
+}
+```
+
+Note `values = CircleState.supportedNames()`. The allowed colours come from the
+map that resolves them, so the list the model picks from and the list the app
+understands are the same object. In the previous version of this sample those
+were two hand-maintained copies, and a colour could be offered but unresolvable.
+
+The registry rejects, as you build it, anything the contract forbids:
+
+- tool and arg names must match `AriToolsContract.TOOL_NAME_REGEX`
+  (`^[a-z][a-z0-9_]{0,31}$`);
+- a tool needs a description, of at most 300 chars
+  (`MAX_DESCRIPTION_LENGTH`). It is spent on every LLM turn, so keep it short
+  and specific;
+- no two tools may share a name, and no tool may repeat an arg;
+- at most 8 tools per provider (`MAX_TOOLS_PER_PROVIDER`);
+- a `tool()` needs exactly one `handle { }` block.
+
+So a mistake fails your own build instead of being dropped from Ari's view.
+
+One builder per argument type — `string`, `int`, `number`, `bool`, `enum` — and
+only `enum` takes `values`, so a value list on any other type cannot be written.
+Prefer `enum` where the value space is closed: it constrains the model to real
+values instead of letting it invent `"cerulean"`.
+
+`confirm = true` makes Ari ask the user before the tool runs. Set it on anything
+destructive.
+
+### What gets generated
 
 ```json
 {
-  "package": "com.example.aridemo",
-  "declarationVersion": 1,
+  "declarationVersion": 2,
+  "protocolVersion": 1,
+  "capabilities": [
+    "cancel",
+    "launch_result"
+  ],
   "tools": [
     {
       "name": "set_circle_color",
       "description": "Changes the colour of one circle by its number, or of every circle if no number is given.",
-      "confirm": false,
       "args": [
         {
           "name": "color",
@@ -79,12 +149,6 @@ see `app/src/main/assets/ari_tools.json` for all four:
           "values": ["red", "green", "blue"],
           "required": true,
           "description": "The colour to change to."
-        },
-        {
-          "name": "number",
-          "type": "int",
-          "required": false,
-          "description": "The circle's permanent number. Leave out to recolour all of them."
         }
       ]
     }
@@ -92,61 +156,82 @@ see `app/src/main/assets/ari_tools.json` for all four:
 }
 ```
 
-- `package` — your application id. Ari trusts the package the declaration
-  actually shipped in, so a mismatch here is logged and ignored rather than
-  fatal.
-- `declarationVersion` — **required**. It is the declaration *format* version
-  (`AriToolsContract.DECLARATION_VERSION`, currently `1`), not the AIDL
-  version. Leave it out and the **whole file** is rejected; it is not read as
-  version `1`. Ari accepts its own version or older and rejects a newer one.
-- `label` — optional display name for your app. Omitted here, so Ari falls back
-  to the manifest label.
-- `name` — tool and arg names must match `^[a-z][a-z0-9_]{0,31}$`.
-- `description` — required on a tool, max 300 chars. It is spent on every LLM
-  turn, so keep it short and specific.
-- `type` is one of `string`, `int`, `number`, `bool`, `enum`.
-- `values` is a **JSON array of strings**, required for `"type": "enum"` and
-  rejected on any other type.
-- `"confirm": true` makes Ari ask the user before the tool runs. Set it on
-  anything destructive.
-- At most 8 tools per provider.
+- `declarationVersion` — the declaration *format* version
+  (`AriToolsContract.DECLARATION_VERSION`, currently `2`), not the AIDL version.
+  The writer sets it. Leave it out and the **whole file** is rejected; it is not
+  read as version `1`. Ari accepts its own version or older.
+- `protocolVersion` — the AIDL surface this SDK speaks
+  (`AriToolsContract.PROTOCOL_VERSION`). The writer sets it.
+- `capabilities` — the optional parts of that surface the SDK implements. The
+  writer lists every one.
+- `label` — optional display name, from `ariTools(label = ...)`. Omitted here,
+  so Ari falls back to the manifest label.
+- There is **no `package` key**. Ari takes the package from the installed APK,
+  so a declared one would only be a second source of truth. Earlier versions of
+  this sample wrote one; it is gone.
+- A key holding its default is left out, so `list_circles` has no `args` key at
+  all.
 
-Prefer `enum` where the value space is closed. It constrains the model to real
-values instead of letting it invent `"cerulean"`.
+Anything invalid is dropped silently at runtime: the tool simply never reaches
+the model, with no error in your app. That is what the drift test protects you
+from. Check Ari's logcat while integrating.
 
-Anything invalid is dropped silently: the tool simply never reaches the model,
-with no error in your app. Check Ari's logcat while integrating.
+### Reading arguments
 
-### Optional arguments — read this before adding one
+`handle { }` hands you a `ToolArgs`. Each declared type has a strict accessor
+and an `OrNull` one:
 
-An optional argument the user didn't mention is **absent** from `args`, never
-present-as-null. So the obvious check works:
+| Declared type | Throws if unreadable | Returns `null` if unreadable |
+|---|---|---|
+| `string`, `enum` | `args.string("color")` | `args.stringOrNull("color")` |
+| `int` | `args.int("number")` | `args.intOrNull("number")` |
+| `number` | `args.number("ratio")` | `args.numberOrNull("ratio")` |
+| `bool` | `args.bool("loud")` | `args.boolOrNull("loud")` |
 
-```kotlin
-val note = args["note"]?.jsonPrimitive?.content   // null when not supplied
-```
+Use the **strict** form for an arg you declared `required = true`. A missing or
+wrong-typed value is then the model's mistake, and the SDK reports it as
+`invalid_argument` naming the arg, so Ari can ask for better arguments. That is
+why `remove_circle` calls `args.int("number")` and does not hand-roll a message.
 
-That is only safe because Ari strips unsupplied optionals before dispatch. Do
-**not** rely on `?.jsonPrimitive?.content` to detect a JSON null yourself — for
-kotlinx's `JsonNull`, `content` is the **string `"null"`**, not Kotlin `null`, so
-a null that did arrive would sail through the `?.` and hand you `"null"` as a
-value. If you want to be defensive, test the type:
+Use the **`OrNull`** form for an optional arg, so you can say what a missing
+value means for that tool. `set_circle_color` reads
+`args.intOrNull("number")`, and absent means *every circle*.
 
-```kotlin
-val raw = args["note"]
-val note = if (raw is JsonNull) null else raw?.jsonPrimitive?.content
-```
+An optional argument the user didn't mention is **absent**, and a JSON `null`
+counts as absent too — `args.has("number")` is false for both. Falsy-but-meaningful
+values (`0`, `false`, `""`) are preserved and reach you normally.
 
-Falsy-but-meaningful values (`0`, `false`, `""`) are preserved and reach you
-normally — only unsupplied optionals are dropped.
+An accessor converts across types when the meaning is unambiguous (`"2"` reads
+as `2`) and returns `null` rather than guessing when it would lose information
+(`1.5` is not an `int`, `"yes"` is not a `bool`).
 
 ## Returning results
 
+The payload is built with one accessor per JSON type, on `org.json`, which ships
+in the framework:
+
 ```kotlin
-AriToolResult.ok("color" to color)          // success, with a payload
+AriToolResult.ok {                          // success, with a payload
+    putInt("number", number)
+    putString("color", color)
+    putObject("circles") { putString("1", "red") }
+}
 AriToolResult.ok()                          // success, nothing to report
 AriToolResult.error("I don't know that.")   // failure; Ari says this to the user
+AriToolResult.error(AriToolErrorCode.INVALID_ARGUMENT, "There's no circle 7.")
 ```
+
+There is no accessor for any other type, so nothing reaches the payload as an
+accidental `toString()` — a `List`, a `Map` or a `LocalDate` is a **compile**
+error until you say how you want it written. `list_circles` uses `putObject`
+for that reason: the numbers stay a JSON object rather than prose the model has
+to re-parse.
+
+Prefer the coded `error(...)`: Ari maps an `AriToolErrorCode` to its own
+translated text and uses it to decide whether a retry can help. This app returns
+`UNAVAILABLE` when the circle limit is reached (removing one makes a retry work)
+and `INVALID_ARGUMENT` for a number that does not exist (the model can pick a
+better one).
 
 Error text is spoken to the user. Write a short explanation, not a stack trace.
 
@@ -155,6 +240,14 @@ Error text is spoken to the user. Write a short explanation, not a stack trace.
 ```bash
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The build needs a JDK 21 toolchain and an `sdk.dir` in `local.properties`.
+To run every check, including the declaration drift test:
+
+```bash
+./gradlew :ari-tool-protocol:testDebugUnitTest :ari-tool-sdk:testDebugUnitTest \
+          :app:testDebugUnitTest
 ```
 
 Requirements on the device:
@@ -179,6 +272,7 @@ Ari is already in a conversation, end and restart the conversation.
 | `Skipping <pkg>: no declaration version` | `declarationVersion` is missing from the top-level object. The whole file is rejected. |
 | `Skipping <pkg>: failed to read or decode ari_tools.json` | Malformed JSON, or a field of the wrong type. |
 | `tool '<name>' dropped: ...` | That one tool failed validation — bad name, missing description, `values` on a non-enum. The other tools still load. |
+| A tool you added in code never appears | The declaration asset was not regenerated. Run `./gradlew :app:testDebugUnitTest` — the drift test names the first line that differs. |
 
 Check discovery with:
 
@@ -188,18 +282,43 @@ adb logcat -d | grep -iE "AppToolRegistry|tool provider|appTools"
 
 A healthy session logs `Discovered 1 app tool provider(s)`.
 
-## Known limitation of this sample
+## Why the SDK is vendored here
 
-`ari-tool-sdk/` is a **copy** of the real SDK module, because there is no
-published artifact yet — leviathan has no Maven publishing, and `publish.sh`
-ships APKs rather than AARs. `ari-tool-sdk/VENDORED_FROM.txt` records the commit
-it was copied from.
+`ari-tool-protocol/` and `ari-tool-sdk/` are **copies** of leviathan's
+`libs/ari-tool-protocol` and `libs/ari-tool-sdk`. Upstream splits the frozen
+AIDL wire contract from the SDK built on it and publishes them as two artifacts,
+so the copy keeps the same two modules.
 
-Do not edit the copy. Change the real module in leviathan and re-copy.
+Everything under `src/`, plus `consumer-rules.pro`, `LICENSE` and `README.md`,
+is byte-for-byte upstream — including upstream's own unit tests, which run here
+(172 of them) and are what shows the copy is faithful rather than merely
+compiling. Each module's `build.gradle.kts` is the **only** file that differs:
+upstream builds with leviathan's convention plugins and version catalog, neither
+of which exists here, so each is a plain-AGP rewrite of the same settings and
+the same dependency versions. `ari-tool-sdk/VENDORED_FROM.txt` records the
+commit.
 
-**The copy currently predates the switch to `assets/ari_tools.json`.** It still
-carries `AriToolsContract.META_DATA_TOOLS` and an XML parser, both of which are
-gone upstream. The app compiles against it only for `AriToolProviderService`
-and `AriToolResult`, and never reads its own declaration, so the staleness is
-harmless here — but read this README, not that copy, for the declaration
-contract. The re-sync lands once leviathan #719 merges.
+**Do not edit the copies.** Change the real modules in leviathan and re-copy.
+
+It is still a copy only because there is nowhere to publish to yet. Upstream has
+`maven-publish` wired up (group `com.ari_os.ari`, version `0.1.0`), but the
+convention plugin carries `TODO MOBILE-2340: add the RealWear remote repository
+once it exists`, and `publishToMavenLocal` is the only working target. Once that
+repository exists, the swap is one dependency: drop both `include(...)` lines
+from `settings.gradle.kts` and replace the app's
+`implementation(project(":ari-tool-sdk"))` with
+
+```kotlin
+implementation("com.ari_os.ari:ari-tool-sdk:<version>")
+```
+
+The protocol module arrives with it, because the SDK exposes it with `api`
+scope.
+
+## Not verified on hardware
+
+Nothing in this sample has been run on a headset or an emulator. What is
+verified is that it builds, that the declaration ships inside the APK, and that
+the declaration satisfies the real constants in `AriToolsContract` — see
+`AriToolsDeclarationContractTest`. The end-to-end path (Ari discovering the
+provider, binding the service, dispatching a call) has **not** been exercised.

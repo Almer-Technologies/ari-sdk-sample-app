@@ -28,16 +28,20 @@ object CircleState {
     /** Most circles that fit legibly on a headset screen. Caps count, not numbers. */
     const val MAX_CIRCLES = 6
 
-    private const val DEFAULT_COLOR = "red"
+    /** Colour [add] uses when Ari sends none. Named in `add_circle`'s declaration. */
+    const val DEFAULT_COLOR = "red"
 
     /**
      * Colours Ari may pick.
      *
-     * Must stay in step with the `values` array of BOTH `color` args in
-     * `assets/ari_tools.json` — that declaration is what constrains the model,
-     * this map is what actually resolves the name. A name here but not there is
-     * unreachable; a name there but not here makes Ari offer a colour the app
-     * then rejects.
+     * This map is the single source of both halves that used to be kept in step
+     * by hand. [supportedNames] feeds the `values` of BOTH `color` args in
+     * `AriToolService`'s declaration, and the same map resolves the name Ari
+     * sends back. Adding an entry here therefore reaches the model as soon as
+     * the declaration asset is regenerated, and a colour can no longer be
+     * offered but unresolvable, or resolvable but unreachable.
+     *
+     * Iteration order is insertion order, so the generated asset is stable.
      *
      * `grey` and `gray` both map to the same colour on purpose: speech-to-text
      * will produce either, and the model can only pick from this list.
@@ -73,7 +77,12 @@ object CircleState {
     /** The numbers currently in use, in display order — for error messages. */
     fun activeNumbers(): List<Int> = _circles.value.map { it.number }
 
-    /** Colour names this app accepts, for error messages. */
+    /**
+     * Colour names this app accepts, in declaration order.
+     *
+     * Read twice: once by `AriToolService` as the `values` of each `color`
+     * enum arg, and once for error messages.
+     */
     fun supportedNames(): List<String> = NAMED.keys.toList()
 
     /** Resolve a declared colour name, or `null` if it isn't one we know. */

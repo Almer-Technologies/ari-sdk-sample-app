@@ -1,2 +1,22 @@
-c6f603fcc568258a58c71f5758c0b293ed177fd3
-leviathan libs/ari-tool-sdk, branch feat/ari-app-tools-sdk
+c786d3abf4b76bd81728fb0787ba3cba44b1dba2
+leviathan libs/ari-tool-protocol and libs/ari-tool-sdk, branch MOBILE-2340-ari-tool-sdk
+
+Both vendored modules are byte-for-byte upstream except their build.gradle.kts.
+Upstream builds them with leviathan's convention plugins (realwear.android.library,
+realwear.android.publish, realwear.kotlinx.serialization, realwear.detekt) and its
+version catalog, none of which exist here, so each module's build.gradle.kts is a
+plain-AGP rewrite that reproduces the same settings and the same dependency
+versions. Everything under src/, plus consumer-rules.pro, LICENSE and README.md,
+is copied unmodified — including upstream's own unit tests, which run here.
+
+To refresh, re-copy from that branch and update the commit above. Do not edit
+the sources.
+
+Why this is still vendored: upstream has maven-publish wired up
+(AndroidLibraryPublishConventionPlugin, group com.ari_os.ari, version 0.1.0),
+but the plugin carries "TODO MOBILE-2340: add the RealWear remote repository
+once it exists" and publishToMavenLocal is the only working target. Once that
+repository exists, replace both include(...) lines in settings.gradle.kts and
+app's implementation(project(":ari-tool-sdk")) with
+implementation("com.ari_os.ari:ari-tool-sdk:<version>"); the protocol module
+arrives with it, because the SDK exposes it with `api` scope.

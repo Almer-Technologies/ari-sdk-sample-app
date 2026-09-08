@@ -1,11 +1,14 @@
 {
-  "package": "com.example.aridemo",
-  "declarationVersion": 1,
+  "declarationVersion": 2,
+  "protocolVersion": 1,
+  "capabilities": [
+    "cancel",
+    "launch_result"
+  ],
   "tools": [
     {
       "name": "add_circle",
       "description": "Adds exactly one circle and returns the permanent number assigned to it. Call this once per circle the user asked for; do not repeat the call after it succeeds. Fails if 6 circles already exist.",
-      "confirm": false,
       "args": [
         {
           "name": "color",
@@ -25,7 +28,6 @@
             "grey",
             "gray"
           ],
-          "required": false,
           "description": "Colour for the new circle. Defaults to red if not given."
         }
       ]
@@ -46,7 +48,6 @@
     {
       "name": "set_circle_color",
       "description": "Changes the colour of one circle by its number, or of every circle if no number is given.",
-      "confirm": false,
       "args": [
         {
           "name": "color",
@@ -72,16 +73,13 @@
         {
           "name": "number",
           "type": "int",
-          "required": false,
           "description": "The circle's permanent number. Leave out to recolour all of them."
         }
       ]
     },
     {
       "name": "list_circles",
-      "description": "Reports every circle on screen with its permanent number and colour. Numbers can have gaps. Call this first whenever the user refers to a circle by colour or position rather than by number.",
-      "confirm": false,
-      "args": []
+      "description": "Reports every circle on screen with its permanent number and colour. Numbers can have gaps. Call this first whenever the user refers to a circle by colour or position rather than by number."
     }
   ]
 }
