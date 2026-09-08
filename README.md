@@ -180,6 +180,58 @@ arg of that tool, that every `required` arg appears in the template, and that
 the template parses as a URI starting with a literal scheme — so no argument can
 choose the scheme.
 
+#### The free-text opt-in, and why this sample does not use it
+
+Some values are free text by nature — a room id, a serial number printed on a
+label. For those the SDK has `freeTextInUri`, a builder on `deeplink()` that
+declares a `string` arg *and* lets it fill a placeholder, writing a
+`freeTextUriArgs` list next to the `uri` in your asset. See "Opening a screen
+with a deeplink" in [ari-tool-sdk/README.md](ari-tool-sdk/README.md).
+
+**This sample deliberately ships no `freeTextInUri` tool.** Three reasons, and
+they are the ones to weigh for your own app:
+
+- **This app has no free-text value.** A circle is an `int` and its colour is an
+  `enum`. Demonstrating the opt-in would mean inventing an argument no user
+  story asks for, and a sample whose job is to show the real shape of an
+  integration should not fabricate one.
+- **The SDK says to prefer a handler when you have a service, and this app has
+  one.** `freeTextInUri` is for when the deeplink *is* the whole integration.
+  Four of the five tools here are handled over the binder, so a free-text
+  deeplink would be the exact case the SDK's own README argues against.
+- **The marker is worth having because it is rare.** Its point is that one grep
+  for `freeTextInUri` finds every free-text deeplink you ship. A sample that
+  ships one for demonstration teaches you that the hit is normal.
+
+If free text is genuinely your case, a `tool { }` with a `handle { }` block is
+still the better shape: your own code receives the phrase, validates it, and
+opens your screen with `AriToolResult.launch(...)`, which puts your code between
+the model's text and your app.
+
+**If you do use `freeTextInUri`, be exact about what you are getting.** Ari
+percent-encodes each value before it fills the template, so the value stays
+inside the one URI component it fills: it cannot add a path segment, a query
+parameter or a fragment, and it cannot change the scheme. **That is the whole of
+it.** Percent-encoding stops *structural* injection and nothing else:
+
+- **It is not sanitisation.** `..` survives it verbatim. So do `'`, `<`, `%00`,
+  a leading `/`, and every other byte that means something to your code.
+- **Your app decodes the value as its first act.** `Uri.getPathSegments()` and
+  `getQueryParameter()` both hand you the *decoded* string, so the encoding is
+  gone before your handler sees a single character of it. Every guarantee above
+  expires on that line.
+- **What you then do with it is entirely your problem.** Decoded and passed to
+  `File(dir, value)` it is a path traversal — `../../databases` is four
+  characters of nothing special to a URI. Concatenated into SQL it is an
+  injection; bind a parameter. Handed to `WebView.loadUrl` it can be a
+  `javascript:` URL. Handed to `Intent.parseUri` it can fabricate an intent
+  aimed at your own exported components. Validate against an allow-list of what
+  the value may be, not a deny-list of what you thought of.
+- **`freeTextUriArgs` is a marker, not a wall.** You write your own declaration,
+  so nothing stops a provider naming any argument in it. It stops the accidental
+  case, where a `string` reaches a URI because nobody looked, and it records the
+  deliberate one so it can be found later.
+
 #### The half the declaration cannot reach
 
 A `uri` in the asset is a promise your app answers the link. Nothing enforces
@@ -281,6 +333,9 @@ the SDK answers `app_error` rather than running anything.
 - There is **no `package` key**. Ari takes the package from the installed APK,
   so a declared one would only be a second source of truth. Earlier versions of
   this sample wrote one; it is gone.
+- `freeTextUriArgs` — names the `string` args of one tool that may fill a
+  `{placeholder}`, written by `freeTextInUri`. Absent here, and an absent key
+  opts nothing in. See "The free-text opt-in" above.
 - A key holding its default is left out, so `list_circles` has no `args` key at
   all. That is why only `show_circle` carries `presentsUi` and `uri`: they are
   the two keys that tell Ari to open a link rather than bind the service, and
