@@ -15,7 +15,9 @@ import org.junit.Test
  *
  * Constructing the registry is itself a check. `ariTools { }` rejects a `tool()`
  * with no `handle { }` block, a repeated name, a name outside the contract's
- * pattern, a description over the cap and a ninth tool. So these assertions run
+ * pattern, a description over the cap and a ninth tool. It also rejects a
+ * `deeplink()` whose template names an arg the tool does not declare, leaves out
+ * a required one, or fills a placeholder with free text. So these assertions run
  * only if every one of those already held.
  */
 class AriToolServiceTest {
@@ -23,20 +25,91 @@ class AriToolServiceTest {
     private val registry = AriToolService().tools()
 
     @Test
-    fun `the service declares the four circle tools, in order`() {
+    fun `the service declares the five circle tools, in order`() {
         assertEquals(
-            listOf("add_circle", "remove_circle", "set_circle_color", "list_circles"),
+            listOf(
+                "add_circle",
+                "remove_circle",
+                "set_circle_color",
+                "list_circles",
+                "show_circle",
+            ),
             registry.declarations.map { tool -> tool.name },
         )
     }
 
-    /** Every tool here is one Ari runs by binding the service, so none may be a deeplink. */
+    /**
+     * The two kinds of tool, told apart by the one field that decides which path
+     * Ari takes. A `uri` means Ari opens the link itself; anything else means it
+     * binds this service. Getting that wrong on a tool does not fail anywhere at
+     * runtime — Ari simply takes the other path.
+     */
     @Test
-    fun `every declared tool is invocable rather than a deeplink`() {
-        registry.declarations.forEach { tool ->
-            assertNull("tool '${tool.name}' declares a uri", tool.uri)
-            assertTrue("tool '${tool.name}' presents ui", !tool.presentsUi)
+    fun `only show_circle is a deeplink, and the rest are invoked`() {
+        val (deeplinks, invocable) = registry.declarations.partition { tool -> tool.uri != null }
+
+        assertEquals(listOf("show_circle"), deeplinks.map { tool -> tool.name })
+        assertEquals(
+            listOf("add_circle", "remove_circle", "set_circle_color", "list_circles"),
+            invocable.map { tool -> tool.name },
+        )
+    }
+
+    /** A tool that opens a screen returns no data, so the SDK sets this for it. */
+    @Test
+    fun `the deeplink presents ui and nothing else does`() {
+        assertEquals(
+            listOf("show_circle"),
+            registry.declarations.filter { tool -> tool.presentsUi }.map { tool -> tool.name },
+        )
+    }
+
+    /**
+     * The rule the SDK enforces as the registry is built, pinned here so it is
+     * visible in this app rather than only upstream: Ari substitutes the value
+     * into a uri another component then handles, so a free-text `string` cannot
+     * fill a placeholder. `number` is an `int`, which can.
+     */
+    @Test
+    fun `every placeholder in the deeplink names a constrained arg of that tool`() {
+        val tool = registry.declarations.single { declaration -> declaration.uri != null }
+        val placeholders = Regex("""\{([^{}]*)}""")
+            .findAll(tool.uri.orEmpty())
+            .map { match -> match.groupValues[1] }
+            .toList()
+
+        assertEquals(listOf("number"), placeholders)
+        placeholders.forEach { name ->
+            val arg = tool.args.single { declared -> declared.name == name }
+            assertTrue(
+                "arg '$name' is ${arg::class.simpleName}, which cannot fill a placeholder",
+                arg is AriToolArg.IntArg ||
+                    arg is AriToolArg.NumberArg ||
+                    arg is AriToolArg.BoolArg ||
+                    arg is AriToolArg.EnumArg,
+            )
         }
+    }
+
+    /** A required arg the template left out could never be delivered. */
+    @Test
+    fun `the deeplink template carries every required arg of its tool`() {
+        val tool = registry.declarations.single { declaration -> declaration.uri != null }
+
+        tool.args.filter { arg -> arg.required }.forEach { arg ->
+            assertTrue(
+                "required arg '${arg.name}' is not in ${tool.uri}",
+                "{${arg.name}}" in tool.uri.orEmpty(),
+            )
+        }
+    }
+
+    /** Every tool Ari runs by binding this service must have somewhere to run. */
+    @Test
+    fun `no invocable tool declares a uri`() {
+        registry.declarations
+            .filter { tool -> tool.name != "show_circle" }
+            .forEach { tool -> assertNull("tool '${tool.name}' declares a uri", tool.uri) }
     }
 
     /**

@@ -1,6 +1,6 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes four capabilities to Ari. Install it, then say:
+A minimal Android app that exposes five capabilities to Ari. Install it, then say:
 
 > "Hey Ari, add a blue circle"
 
@@ -14,6 +14,7 @@ A minimal Android app that exposes four capabilities to Ari. Install it, then sa
 | `remove_circle` | `number` | Declares `confirm = true`. Other circles keep their numbers. |
 | `set_circle_color` | `color`, `number?` | Omit the number to recolour every circle. |
 | `list_circles` | none | How Ari answers "what's on screen?" — it can't see the display. |
+| `show_circle` | `number` | **A deeplink.** No handler: Ari opens `aridemo://circle/{number}` itself. |
 
 Circle numbers are **permanent**, so they can have gaps. Remove circle 2 of 4
 and the rest stay 1, 3 and 4. That is what makes "remove the purple ones" safe:
@@ -50,6 +51,12 @@ Two files, and you write both:
    `com.ari_os.ari.permission.BIND_TOOL_PROVIDER` so only Ari can bind it. It
    holds **no pointer to the declaration** — a manifest-supplied path would
    still compile with a typo and then drop the provider at runtime, silently.
+
+`show_circle` is the exception that proves what the service is for. It is a
+**deeplink tool**: declared with a `uri` and no handler, so Ari never binds the
+service and this app's process is never started for it. Its code is an
+`<intent-filter>` and `MainActivity`. A partner whose tools are all deeplinks
+writes no service at all — see "A tool that is only a link".
 
 **`app/src/main/assets/ari_tools.json` is generated, not written.**
 `AriToolsAsset.writeTo` encodes it from the same registry `tools()` returns, and
@@ -134,6 +141,109 @@ sets it on `remove_circle`, because it documents which tool is the destructive
 one and a later SDK version may honour it. Do not design around it being
 honoured now.
 
+### A tool that is only a link
+
+`show_circle` has **no handler**. Ari fills the `{number}` placeholder from the
+argument and opens the result as `ACTION_VIEW` on this app's package. Nothing
+binds the service, no IPC happens, and no code of this app's runs before the
+screen appears:
+
+```kotlin
+deeplink(
+    name = "show_circle",
+    description = "Opens this app with the circle of this number highlighted. Use it " +
+        "when the user asks to see or point out a circle rather than to change one.",
+    uri = CircleDeeplink.TEMPLATE,          // "aridemo://circle/{number}"
+) {
+    int("number", description = "The circle's permanent number.", required = true)
+}
+```
+
+Ari takes **only** the URI. No action, component, extras or flags come from the
+declaration, so a tool can never ask Ari to send an arbitrary intent.
+
+**A placeholder takes a constrained type only.** `int`, `number`, `bool` and
+`enum` may fill one. A `string` may not — the model writes its text and nothing
+in the declaration limits what it writes, so a free-text value would go straight
+into a URI another component then handles. The registry rejects it as you build
+it:
+
+```
+tool 'show_circle': arg 'number' is free text, so it cannot fill a uri placeholder
+```
+
+That costs this app nothing, because a circle's identity really is a whole
+number. **If your natural example needs free text, it is not a deeplink.** A
+"find the work order mentioning *cracked seal*" tool cannot be one. Declare it
+as a `tool { }` with a `handle { }` block, validate the phrase in your own code,
+and open your screen with `AriToolResult.launch(...)`. That puts your code
+between the model's text and your app, which is where it belongs.
+
+The registry also checks, as you build it, that every `{placeholder}` names an
+arg of that tool, that every `required` arg appears in the template, and that
+the template parses as a URI starting with a literal scheme — so no argument can
+choose the scheme.
+
+#### The half the declaration cannot reach
+
+A `uri` in the asset is a promise your app answers the link. Nothing enforces
+that at runtime: if the `<intent-filter>` does not match, Android drops the
+intent, and **no error reaches your app** — the user just sees nothing happen.
+So this sample keeps both ends on one constant, in `CircleDeeplink.kt`:
+
+```kotlin
+object CircleDeeplink {
+    const val SCHEME = "aridemo"
+    const val HOST = "circle"
+    const val TEMPLATE = "$SCHEME://$HOST/{number}"
+
+    private val PATTERN = Regex("$SCHEME://$HOST/(\\d{1,9})")
+
+    fun circleNumber(uri: String?): Int? =
+        uri?.let { link -> PATTERN.matchEntire(link)?.groupValues?.get(1)?.toInt() }
+}
+```
+
+and the manifest declares the matching filter:
+
+```xml
+<activity
+    android:name=".MainActivity"
+    android:exported="true"
+    android:launchMode="singleTask">
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:host="circle" android:scheme="aridemo" />
+    </intent-filter>
+</activity>
+```
+
+Three things there are easy to get wrong:
+
+- **`CATEGORY_DEFAULT` is required.** `startActivity` adds it to every implicit
+  intent, so a filter without it matches nothing.
+- **`CATEGORY_BROWSABLE` is deliberately absent.** Ari sets your package on the
+  intent, so it does not need it — and adding it would let any web page fire
+  `aridemo://circle/3` at your app too.
+- **`launchMode="singleTask"`** so a second "show me circle 4" reaches the
+  instance already on screen, at `onNewIntent`, instead of stacking another
+  activity behind the first.
+
+XML cannot read a Kotlin constant, so `CircleDeeplinkTest` parses
+`AndroidManifest.xml` off disk and fails the build when its scheme and host stop
+matching `CircleDeeplink`'s — the same drift check `ari_tools.json` gets.
+
+**A substituted value is still input to validate.** The type rule bounds what
+can arrive to a whole number. It does not check that the number names a circle
+that exists, so `MainActivity` looks it up and says so when it does not:
+
+> Ari asked for circle 9, which isn't on screen.
+
+Finally, `presentsUi` is set for you — a deeplink tool returns no data — and if
+Ari ever invokes a deeplink tool over the binder instead of opening the link,
+the SDK answers `app_error` rather than running anything.
+
 ### What gets generated
 
 ```json
@@ -176,7 +286,9 @@ honoured now.
   so a declared one would only be a second source of truth. Earlier versions of
   this sample wrote one; it is gone.
 - A key holding its default is left out, so `list_circles` has no `args` key at
-  all.
+  all. That is why only `show_circle` carries `presentsUi` and `uri`: they are
+  the two keys that tell Ari to open a link rather than bind the service, and
+  every other tool leaves both out.
 
 Anything invalid is dropped silently at runtime: the tool simply never reaches
 the model, with no error in your app. That is what the drift test protects you
@@ -299,7 +411,7 @@ dependencies {
 }
 ```
 
-Four things worth knowing before you copy this:
+Five things worth knowing before you copy this:
 
 - **The `@OptIn` is not decoration.** `Dispatchers.setMain`,
   `UnconfinedTestDispatcher` and `Dispatchers.resetMain` are all marked
@@ -316,6 +428,11 @@ Four things worth knowing before you copy this:
 - **The permission gate cannot be tested here either.** `enforceCallingPermission`
   is a no-op under that same jar, so no unit test can show it turning a caller
   away. Only a device proves the service is actually closed to other apps.
+- **A deeplink tool has no handler to test.** Invoking `show_circle` through the
+  binder reports `app_error` — "this tool is a deeplink, so the app runs no code
+  for it" — which is worth pinning, because it is what Ari taking the wrong path
+  looks like. What the link actually opens is not reachable from a JVM; see
+  `CircleDeeplinkTest` for how far a static check gets.
 
 To name the caller your handler reads, override `callingPackage()` in a test
 subclass of your service. This app's handlers do not read it, so nothing here
@@ -344,6 +461,12 @@ code. To run every check, including the declaration drift test:
 test tasks on `ubuntu-latest`, then reads `assets/ari_tools.json` back out of
 the built APK and diffs it against the committed source. A hosted runner is
 enough: this build needs a JDK and an Android SDK and nothing else.
+
+`:app:testDebugUnitTest` carries the two drift checks that would otherwise fail
+silently: the declaration asset against `AriToolService`'s registry, and the
+`show_circle` `<intent-filter>` against `CircleDeeplink`'s scheme and host. Both
+manifest and asset are declared as task inputs, so editing either by hand
+re-runs the tests rather than leaving them `UP-TO-DATE`.
 
 **It does not detect upstream SDK changes breaking a partner.** The SDK here is
 a vendored copy, so a green run proves *this copy* compiles and its tests pass.
@@ -375,6 +498,9 @@ Ari is already in a conversation, end and restart the conversation.
 | `Skipping <pkg>: failed to read or decode ari_tools.json` | Malformed JSON, or a field of the wrong type. |
 | `tool '<name>' dropped: ...` | That one tool failed validation — bad name, missing description, `values` on a non-enum. The other tools still load. |
 | A tool you added in code never appears | The declaration asset was not regenerated. Run `./gradlew :app:testDebugUnitTest` — the drift test names the first line that differs. |
+| A deeplink tool does nothing at all, with no error anywhere | The `<intent-filter>` does not match the uri Ari built. Android drops an unmatched intent silently and your app is never told. Check the scheme, the host, and that `CATEGORY_DEFAULT` is on the filter. |
+| A deeplink opens a second copy of the screen each time | The activity is not `launchMode="singleTask"`, so Ari's intent stacks a new instance instead of reaching `onNewIntent`. |
+| `arg '<name>' is free text, so it cannot fill a uri placeholder` | A `string` arg in a `{placeholder}`. Only `int`, `number`, `bool` and `enum` may fill one — see "A tool that is only a link". |
 | A handler test throws `tool '<name>' reported no result` | `org.json` is not on the test classpath, so the stubbed one returns defaults. Or the handler is still suspended — check the dispatcher. |
 | A handler test throws about a missing main dispatcher | No `Dispatchers.setMain(...)` in `@Before`. Every handler runs on the main dispatcher and a JVM test has to supply one. |
 
@@ -433,3 +559,17 @@ the `BIND_TOOL_PROVIDER` permission actually turning another app away. The
 handler tests reach the service through the same binder Ari calls, but they call
 it in-process — no real Binder transaction crosses, which is exactly why the
 permission gate reads as a no-op there.
+
+**The deeplink is the least proven part of this sample, not the most.**
+`show_circle` is verified only as far as static checks reach: the tool ships in
+the APK's asset with its `uri`; the declaration passes `AriToolsContract`'s real
+checks; the `<intent-filter>` is in the packaged manifest with the scheme and
+host the template uses, checked against `CircleDeeplink`'s constants at build
+time; and the service refuses to run the tool if Ari invokes it instead of
+opening the link. What none of that shows is the thing that matters — Ari
+substituting the number, firing `ACTION_VIEW`, **Android resolving the filter**,
+and `MainActivity` coming to the front with the circle ringed. Intent resolution
+happens in `PackageManager` against installed packages, so it cannot be run on a
+JVM at all. A matching filter on disk is necessary for that and not sufficient
+for it. Until someone runs this on a headset, "the deeplink works" is a
+reasonable expectation and not a result.

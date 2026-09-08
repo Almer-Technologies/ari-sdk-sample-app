@@ -23,10 +23,13 @@ import org.junit.Test
  * handler and the error envelope over one code path. There is no second path a
  * test could prove instead: what passes here is what a real invocation does.
  *
- * The other two test classes stop at the declaration — [AriToolServiceTest]
- * reads the registry and [AriToolsAssetTest] compares it to the committed
- * asset. Neither reaches a handler, so neither would notice `add_circle`
- * returning the wrong number.
+ * The other test classes stop at the declaration — [AriToolServiceTest] reads
+ * the registry, [AriToolsAssetTest] compares it to the committed asset, and
+ * [CircleDeeplinkTest] checks the manifest against it. None reaches a handler,
+ * so none would notice `add_circle` returning the wrong number.
+ *
+ * `show_circle` is the exception: it is a deeplink, so it has no handler to run
+ * and the only thing to prove here is that the service refuses to run it.
  *
  * The `@OptIn` is needed because `Dispatchers.setMain`,
  * `UnconfinedTestDispatcher` and `Dispatchers.resetMain` are all marked
@@ -181,6 +184,23 @@ class AriToolHandlerTest {
         val failure = failure(invoke("take_note"))
 
         assertEquals(AriToolErrorCode.UNKNOWN_TOOL.wireValue, failure.code)
+    }
+
+    /**
+     * `show_circle` is declared with a `uri` and no handler, so Ari is meant to
+     * open the link rather than bind this service. Invoking it is Ari's mistake,
+     * not the model's, and the SDK says so rather than reporting a missing tool
+     * — `show_circle` exists, it just runs no code here.
+     *
+     * This is the whole of what a JVM test can say about the deeplink path
+     * through the service: the screen it actually opens needs a device.
+     */
+    @Test
+    fun `invoking the deeplink tool reports app_error rather than running anything`() {
+        val failure = failure(invoke("show_circle", """{"number":1}"""))
+
+        assertEquals(AriToolErrorCode.APP_ERROR.wireValue, failure.code)
+        assertTrue(failure.message, "deeplink" in failure.message.orEmpty())
     }
 
     private fun invoke(toolName: String, argsJson: String = ""): AriToolResult =

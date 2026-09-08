@@ -6,12 +6,46 @@
         android:label="@string/app_name"
         android:supportsRtl="true">
 
+        <!--
+          singleTask because of the deeplink below. Ari sends the link from
+          outside this task, so without it a second "show circle 4" would stack
+          another MainActivity behind the first instead of reaching the one
+          already on screen. With it there is one instance and the new link
+          arrives at onNewIntent.
+        -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              The other half of the `show_circle` tool.
+
+              That tool is declared with a `uri` and NO handler, so Ari never
+              binds the service for it: it fills `aridemo://circle/{number}`
+              from the argument and fires it as ACTION_VIEW on this package.
+              This filter is the only reason anything happens. Without it
+              Android drops the intent and the user sees nothing — no error
+              reaches this app, which is why `CircleDeeplinkTest` checks the
+              filter against `CircleDeeplink`'s constants at build time.
+
+              CATEGORY_DEFAULT is required: startActivity adds it to every
+              implicit intent, and a filter without it matches nothing.
+
+              CATEGORY_BROWSABLE is deliberately absent. Ari sets this package
+              on the intent, so it does not need it, and adding it would let any
+              web page fire `aridemo://circle/3` at this app as well.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:host="circle"
+                    android:scheme="aridemo" />
             </intent-filter>
         </activity>
 

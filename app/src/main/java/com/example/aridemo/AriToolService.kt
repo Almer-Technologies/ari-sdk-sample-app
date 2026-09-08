@@ -16,6 +16,12 @@ import com.ari_os.ari.sdk.ariTools
  * `color` argument's allowed values come straight from [CircleState]'s palette
  * instead of a copy kept in step by hand.
  *
+ * Four of the five tools work that way. `show_circle` is the other kind: it is
+ * declared with a `uri` and no handler, so Ari opens the link itself and never
+ * binds this service. It is here only because a tool is declared in one place
+ * whatever runs it — its code is [MainActivity] and the manifest's intent
+ * filter, not this class.
+ *
  * `assets/ari_tools.json` is written from this registry by
  * `AriToolsAsset.writeTo` and committed — see `AriToolsAssetTest`, which fails
  * the build when the committed file stops matching this code. Nothing in that
@@ -123,6 +129,41 @@ class AriToolService : AriToolProviderService() {
                 "circle by colour or position rather than by number.",
         ) {
             handle { listCircles() }
+        }
+
+        /**
+         * The only tool with no handler, and the only one this service never
+         * runs. Ari fills `{number}` from the `number` argument and opens
+         * `aridemo://circle/3` as `ACTION_VIEW` on this package; the manifest's
+         * intent filter routes it to [MainActivity], which highlights that
+         * circle. Nothing binds this service, and the SDK reports `app_error`
+         * if Ari ever invokes it instead of opening the link.
+         *
+         * `{number}` is filled by an `int`, which is what the SDK allows: only a
+         * type whose values the declaration constrains — `int`, `number`, `bool`
+         * or `enum` — may fill a placeholder, because the value goes into a uri
+         * another component then handles. A free-text `string` is rejected here,
+         * as you build the registry. That costs nothing in this app, since a
+         * circle's identity really is a whole number; a tool that has to take a
+         * phrase belongs in a `tool { }` with a `handle { }` block that
+         * validates the text and returns `AriToolResult.launch(...)`.
+         *
+         * The template is [CircleDeeplink.TEMPLATE], so what Ari is told to open
+         * and what the app parses are one constant rather than two strings that
+         * agree today.
+         */
+        deeplink(
+            name = "show_circle",
+            description = "Opens this app with the circle of this number highlighted. Use it " +
+                "when the user asks to see or point out a circle rather than to change one.",
+            uri = CircleDeeplink.TEMPLATE,
+        ) {
+            int(
+                "number",
+                description = "The circle's permanent number, as shown on it and reported by " +
+                    "list_circles. Not a position.",
+                required = true,
+            )
         }
     }
 

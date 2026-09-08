@@ -80,6 +80,20 @@
     {
       "name": "list_circles",
       "description": "Reports every circle on screen with its permanent number and colour. Numbers can have gaps. Call this first whenever the user refers to a circle by colour or position rather than by number."
+    },
+    {
+      "name": "show_circle",
+      "description": "Opens this app with the circle of this number highlighted. Use it when the user asks to see or point out a circle rather than to change one.",
+      "presentsUi": true,
+      "uri": "aridemo://circle/{number}",
+      "args": [
+        {
+          "name": "number",
+          "type": "int",
+          "required": true,
+          "description": "The circle's permanent number, as shown on it and reported by list_circles. Not a position."
+        }
+      ]
     }
   ]
 }

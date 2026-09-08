@@ -185,6 +185,44 @@ class AriToolsDeclarationContractTest {
         }
     }
 
+    /**
+     * The tool-level keys, pinned the way the arg keys above are. `uri` and
+     * `presentsUi` are the newest of them and the reason this exists: a deeplink
+     * tool is the only thing in this app that writes either, and a stray
+     * tool-level key would otherwise reach the host unchecked.
+     */
+    @Test
+    fun `every tool on disk has only the keys the host reads`() {
+        val tools = raw.getJSONArray("tools")
+        for (t in 0 until tools.length()) {
+            val tool = tools.getJSONObject(t)
+            val keys = tool.keys().asSequence().toSet()
+            assertTrue(
+                "tool '${tool.getString("name")}' has unexpected keys: ${keys - TOOL_KEYS}",
+                TOOL_KEYS.containsAll(keys),
+            )
+        }
+    }
+
+    /**
+     * A uri tool opens a screen and returns no data, so the two keys travel
+     * together — Ari drops a tool that claims one without the other.
+     */
+    @Test
+    fun `the one uri on disk comes with presentsUi, and nothing else sets either`() {
+        val tools = raw.getJSONArray("tools")
+        val withUri = mutableListOf<String>()
+        val presenting = mutableListOf<String>()
+        for (t in 0 until tools.length()) {
+            val tool = tools.getJSONObject(t)
+            if (tool.has("uri")) withUri += tool.getString("name")
+            if (tool.optBoolean("presentsUi")) presenting += tool.getString("name")
+        }
+
+        assertEquals(listOf("show_circle"), withUri)
+        assertEquals(withUri, presenting)
+    }
+
     /** Ari takes the package from the installed APK, so a declared one is a second truth. */
     @Test
     fun `the asset carries no package id`() {
@@ -205,6 +243,8 @@ class AriToolsDeclarationContractTest {
 
     private companion object {
         val ARG_KEYS = setOf("name", "type", "values", "required", "description")
+
+        val TOOL_KEYS = setOf("name", "description", "confirm", "presentsUi", "uri", "args")
 
         val ASSET_TEXT: String = File(
             System.getProperty("ari.tools.assetsDir")

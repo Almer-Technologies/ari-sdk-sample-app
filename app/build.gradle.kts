@@ -41,6 +41,12 @@ android {
 // red test rather than a tool Ari never offers.
 val ariToolsAssets = layout.projectDirectory.dir("src/main/assets")
 
+// CircleDeeplinkTest reads the manifest to check the `show_circle` intent filter
+// still matches the uri that tool declares. Nothing at runtime reports that pair
+// drifting apart: Ari fires ACTION_VIEW, and a filter that no longer matches means
+// Android drops the intent with no error reaching this app.
+val ariAppManifest = layout.projectDirectory.file("src/main/AndroidManifest.xml")
+
 tasks.withType<Test>().configureEach {
     // The test reads the asset through this absolute path, so Gradle cannot infer
     // it. Without declaring it, a hand-edit of the asset leaves the test task
@@ -50,9 +56,16 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("ariToolsAssets")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
-    // The test must not guess where the assets folder is: a unit test's working
+    // Same reasoning for the manifest: without this, removing the intent filter
+    // leaves the test task UP-TO-DATE and the check that would catch it is skipped.
+    inputs.file(ariAppManifest)
+        .withPropertyName("ariAppManifest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // The tests must not guess where the module is: a unit test's working
     // directory is not the module directory under every runner.
     systemProperty("ari.tools.assetsDir", ariToolsAssets.asFile.absolutePath)
+    systemProperty("ari.app.manifest", ariAppManifest.asFile.absolutePath)
     systemProperty(
         "ari.tools.write",
         providers.gradleProperty("ari.writeToolsAsset").isPresent.toString(),
