@@ -60,9 +60,11 @@ class AriToolService : AriToolProviderService() {
         }
 
         /**
-         * The only tool declared with `confirm = true`, which makes Ari ask the
-         * user before running it. Use that for anything destructive — removal
-         * cannot be undone here.
+         * The only tool declared with `confirm = true`. The flag is not read
+         * today — Ari confirms every app tool and shows the argument values,
+         * and a provider cannot opt out of that. It is set here because it
+         * records which tool is the destructive one, and a later SDK version
+         * may honour it.
          */
         tool(
             name = "remove_circle",

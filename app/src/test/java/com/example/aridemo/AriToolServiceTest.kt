@@ -39,9 +39,13 @@ class AriToolServiceTest {
         }
     }
 
-    /** Removal cannot be undone, so it is the one tool Ari must confirm first. */
+    /**
+     * Ari confirms every tool regardless, so this pins intent rather than
+     * behaviour: `confirm` is not read today, and removal is the one tool that
+     * would want it if it were.
+     */
     @Test
-    fun `only removal asks the user to confirm`() {
+    fun `removal is the only tool that declares confirm`() {
         assertEquals(
             listOf("remove_circle"),
             registry.declarations.filter { tool -> tool.confirm }.map { tool -> tool.name },

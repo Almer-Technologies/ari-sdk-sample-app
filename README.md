@@ -11,7 +11,7 @@ A minimal Android app that exposes four capabilities to Ari. Install it, then sa
 | Tool | Args | Notes |
 |---|---|---|
 | `add_circle` | `color?` | Appends a circle, returns its number. Defaults red. |
-| `remove_circle` | `number` | `confirm = true` — Ari asks first. Other circles keep their numbers. |
+| `remove_circle` | `number` | Declares `confirm = true`. Other circles keep their numbers. |
 | `set_circle_color` | `color`, `number?` | Omit the number to recolour every circle. |
 | `list_circles` | none | How Ari answers "what's on screen?" — it can't see the display. |
 
@@ -30,8 +30,9 @@ and guesses wrong after a removal.
 looks identical to once. `add_circle` is not, so when the language model
 occasionally regenerates a turn and repeats its tool call, you get a circle you
 never asked for. Same model flakiness, wildly different consequence. Where a tool
-must accumulate or destroy, say so in the description (see `add_circle`) and
-consider `confirm = true`.
+must accumulate or destroy, say so in the description (see `add_circle`).
+Ari confirms every tool call anyway, but the description is what the model
+reads before it decides to make the call at all.
 
 **Ari narrates before it knows.** The model often says "adding it" before reading
 the tool result, so a failure can be spoken as a success. Return precise error
@@ -125,8 +126,13 @@ only `enum` takes `values`, so a value list on any other type cannot be written.
 Prefer `enum` where the value space is closed: it constrains the model to real
 values instead of letting it invent `"cerulean"`.
 
-`confirm = true` makes Ari ask the user before the tool runs. Set it on anything
-destructive.
+**Ari confirms every app tool.** It asks the user before it runs any of them
+and shows the argument values the call will send, and a provider cannot opt out
+— the declaration comes from your own APK, so nothing in it could win an
+exemption. The `confirm` flag on `tool()` is **not read today**. This app still
+sets it on `remove_circle`, because it documents which tool is the destructive
+one and a later SDK version may honour it. Do not design around it being
+honoured now.
 
 ### What gets generated
 
@@ -235,6 +241,86 @@ better one).
 
 Error text is spoken to the user. Write a short explanation, not a stack trace.
 
+## Testing your handlers
+
+`invokeToolInTest` runs one tool call from a JVM unit test and hands back the
+result Ari would read. The call enters your service through the same binder Ari
+calls, so one test covers the argument parsing, the handler and the error
+envelope — there is no separate test path to prove.
+
+```kotlin
+@OptIn(ExperimentalCoroutinesApi::class)
+class AriToolHandlerTest {
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        CircleState.reset()
+    }
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun `add_circle reports the number, the colour and the new total`() {
+        val result = AriToolService().invokeToolInTest("add_circle", """{"color":"blue"}""")
+
+        val payload = (result as AriToolResult.Ok).payload
+        assertEquals(2, payload.int("number"))
+        assertEquals("blue", payload.string("color"))
+    }
+
+    @Test
+    fun `remove_circle without its required argument names the argument`() {
+        val result = AriToolService().invokeToolInTest("remove_circle", "{}")
+
+        val failure = result as AriToolResult.Failure
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("arg 'number' is missing", failure.message)
+    }
+}
+```
+
+`app/src/test/java/com/example/aridemo/AriToolHandlerTest.kt` is the full set —
+ten tests over all four tools, including the circle limit, the number gap a
+removal leaves, a colour outside the declared `enum`, and an undeclared tool
+name.
+
+Your test module needs three things, and each missing piece fails its own way:
+
+```kotlin
+android {
+    testOptions { unitTests.isReturnDefaultValues = true }   // or the stubs throw
+}
+
+dependencies {
+    testImplementation("org.json:json:20250517")                        // or no result at all
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")  // or setMain is missing
+}
+```
+
+Four things worth knowing before you copy this:
+
+- **The `@OptIn` is not decoration.** `Dispatchers.setMain`,
+  `UnconfinedTestDispatcher` and `Dispatchers.resetMain` are all marked
+  `ExperimentalCoroutinesApi`. Without the annotation you get three warnings,
+  not a failed build — unless your project sets `allWarningsAsErrors`, and then
+  it is a failed build.
+- **`Ok.payload` reads flat values only.** It is a `ToolArgs`, so
+  `payload.string("circles")` **throws** on `list_circles`'s nested object. Read
+  a nested payload through `org.json`, off `payload.toString()`.
+- **A launch tool cannot be tested here.** `AriToolResult.launch(...)` needs
+  `PendingIntent.isImmutable`, which the android unit-test jar cannot report, so
+  it comes back as an `unavailable` failure. This app declares no launch tool;
+  if yours does, cover it on a device.
+- **The permission gate cannot be tested here either.** `enforceCallingPermission`
+  is a no-op under that same jar, so no unit test can show it turning a caller
+  away. Only a device proves the service is actually closed to other apps.
+
+To name the caller your handler reads, override `callingPackage()` in a test
+subclass of your service. This app's handlers do not read it, so nothing here
+does.
+
 ## Build and install
 
 ```bash
@@ -242,13 +328,29 @@ Error text is spoken to the user. Write a short explanation, not a stack trace.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The build needs a JDK 21 toolchain and an `sdk.dir` in `local.properties`.
-To run every check, including the declaration drift test:
+The build needs JDK 21 and an Android SDK — either an `sdk.dir` in
+`local.properties` or `ANDROID_HOME` in the environment. No module declares a
+Gradle toolchain, so the JDK Gradle itself runs on is the one that compiles the
+code. To run every check, including the declaration drift test:
 
 ```bash
 ./gradlew :ari-tool-protocol:testDebugUnitTest :ari-tool-sdk:testDebugUnitTest \
           :app:testDebugUnitTest
 ```
+
+## CI
+
+`.github/workflows/build.yml` runs `:app:assembleDebug` and all three modules'
+test tasks on `ubuntu-latest`, then reads `assets/ari_tools.json` back out of
+the built APK and diffs it against the committed source. A hosted runner is
+enough: this build needs a JDK and an Android SDK and nothing else.
+
+**It does not detect upstream SDK changes breaking a partner.** The SDK here is
+a vendored copy, so a green run proves *this copy* compiles and its tests pass.
+Nothing in CI fetches the upstream modules, so upstream can move under this
+sample and every run stays green until someone re-vendors by hand. That gap
+closes when the SDK is a published artifact this repo resolves as a dependency,
+and not before — see "Why the SDK is vendored here".
 
 Requirements on the device:
 
@@ -273,6 +375,8 @@ Ari is already in a conversation, end and restart the conversation.
 | `Skipping <pkg>: failed to read or decode ari_tools.json` | Malformed JSON, or a field of the wrong type. |
 | `tool '<name>' dropped: ...` | That one tool failed validation — bad name, missing description, `values` on a non-enum. The other tools still load. |
 | A tool you added in code never appears | The declaration asset was not regenerated. Run `./gradlew :app:testDebugUnitTest` — the drift test names the first line that differs. |
+| A handler test throws `tool '<name>' reported no result` | `org.json` is not on the test classpath, so the stubbed one returns defaults. Or the handler is still suspended — check the dispatcher. |
+| A handler test throws about a missing main dispatcher | No `Dispatchers.setMain(...)` in `@Before`. Every handler runs on the main dispatcher and a JVM test has to supply one. |
 
 Check discovery with:
 
@@ -291,8 +395,8 @@ so the copy keeps the same two modules.
 
 Everything under `src/`, plus `consumer-rules.pro`, `LICENSE` and `README.md`,
 is byte-for-byte upstream — including upstream's own unit tests, which run here
-(172 of them) and are what shows the copy is faithful rather than merely
-compiling. Each module's `build.gradle.kts` is the **only** file that differs:
+(179 of them: 16 in `ari-tool-protocol`, 163 in `ari-tool-sdk`) and are what
+shows the copy is faithful rather than merely compiling. Each module's `build.gradle.kts` is the **only** file that differs:
 upstream builds with leviathan's convention plugins and version catalog, neither
 of which exists here, so each is a plain-AGP rewrite of the same settings and
 the same dependency versions. `ari-tool-sdk/VENDORED_FROM.txt` records the
@@ -318,7 +422,14 @@ scope.
 ## Not verified on hardware
 
 Nothing in this sample has been run on a headset or an emulator. What is
-verified is that it builds, that the declaration ships inside the APK, and that
-the declaration satisfies the real constants in `AriToolsContract` — see
-`AriToolsDeclarationContractTest`. The end-to-end path (Ari discovering the
-provider, binding the service, dispatching a call) has **not** been exercised.
+verified, on a JVM, is that it builds; that the declaration ships inside the
+APK; that the declaration satisfies the real constants in `AriToolsContract`
+(`AriToolsDeclarationContractTest`); and that every tool returns what it should
+when its handler is invoked through the binder (`AriToolHandlerTest`).
+
+What is **not** exercised is everything that needs a device: Ari discovering the
+provider, reading the asset out of the installed APK, binding the service, and
+the `BIND_TOOL_PROVIDER` permission actually turning another app away. The
+handler tests reach the service through the same binder Ari calls, but they call
+it in-process — no real Binder transaction crosses, which is exactly why the
+permission gate reads as a no-op there.

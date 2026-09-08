@@ -37,7 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  */
 private val VOICE_COMMANDS = listOf(
     "add a blue circle" to "adds one with a new number",
-    "remove circle 2" to "asks you to confirm first",
+    "remove circle 2" to "removes it by its number",
     "remove the purple circles" to "removes every purple one",
     "change circle 3 to yellow" to "recolours just that one",
     "change the colour to purple" to "recolours every circle",
