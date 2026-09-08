@@ -1,0 +1,102 @@
+# Builds the app and runs every module's unit tests.
+#
+# WHAT THIS CATCHES: a sample that no longer compiles, a test that no longer
+# passes, and a declaration asset someone edited by hand or forgot to
+# regenerate — because :app:testDebugUnitTest includes the drift check that
+# compares assets/ari_tools.json to AriToolService's registry.
+#
+# WHAT THIS DOES NOT CATCH: upstream SDK changes breaking a partner.
+# ari-tool-sdk/ and ari-tool-protocol/ are VENDORED COPIES of leviathan's
+# libs/ari-tool-sdk and libs/ari-tool-protocol (see
+# ari-tool-sdk/VENDORED_FROM.txt). A green run proves THIS COPY compiles and
+# its tests pass. It says nothing about the upstream modules, which nothing
+# here fetches, so upstream can change under this sample and every run stays
+# green until someone re-vendors by hand. That gap closes when the SDK is a
+# published artifact and this repo resolves it as a dependency, not before.
+#
+# WHAT NOTHING HERE COVERS: the device. No emulator, no headset. The
+# permission gate is a no-op under the android unit-test jar and a launch
+# result cannot report PendingIntent.isImmutable there, so neither is
+# exercised. See "Not verified on hardware" in the README.
+#
+# RUNNER: ubuntu-latest, a hosted runner. This build needs a JDK and an Android
+# SDK and nothing else — no signing keys, no emulator, no Xcode, no
+# submodules, and only google() + mavenCentral() for dependencies. The hosted
+# Ubuntu image ships an Android SDK with its licences accepted, so AGP can
+# fetch any platform or build-tools it is missing. leviathan runs on
+# self-hosted macOS ARM64 runners because it is a large monorepo with iOS
+# targets, release signing and warm caches; none of that applies to a
+# three-module sample, and a hosted runner keeps this repo forkable by a
+# partner.
+#
+# JDK 21, pinned rather than inherited. AGP 9.1.0 needs 17 or newer, no module
+# declares a toolchain, so whatever JDK Gradle runs on is the one that compiles
+# the code. 21 is what the README tells a partner to use and what this was
+# verified against locally.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # local.properties is gitignored, so there is no sdk.dir here. The build
+      # finds the SDK through ANDROID_HOME, which the hosted image sets.
+      - name: Report the toolchain
+        run: |
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ./gradlew --version
+
+      # Every module named explicitly, so the two vendored SDK modules are
+      # visibly covered — nothing else in the repo runs their suites. Add a new
+      # module here as well as to settings.gradle.kts.
+      - name: Build and test
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleDebug \
+            :app:testDebugUnitTest \
+            :ari-tool-sdk:testDebugUnitTest \
+            :ari-tool-protocol:testDebugUnitTest
+
+      # The asset is what Ari reads out of the installed APK, so prove it is in
+      # there and matches the committed source. The drift test already ties the
+      # source to the code; this ties the shipped bytes to the source.
+      - name: Check the declaration ships inside the APK
+        run: |
+          unzip -p app/build/outputs/apk/debug/app-debug.apk \
+            assets/ari_tools.json > /tmp/ari_tools_from_apk.json
+          diff app/src/main/assets/ari_tools.json /tmp/ari_tools_from_apk.json
+          echo "assets/ari_tools.json in the APK matches the committed declaration"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          if-no-files-found: ignore
