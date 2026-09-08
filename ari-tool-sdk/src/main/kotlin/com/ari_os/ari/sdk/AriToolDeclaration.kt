@@ -34,6 +34,17 @@ private val URI_LITERAL_SCHEME = Regex("""^[a-zA-Z][a-zA-Z0-9+.\-]*:""")
 // are checked on a copy with every placeholder replaced by this.
 private const val PLACEHOLDER_STAND_IN = "x"
 
+// Ari interpolates the value into a uri another app then handles, so only a type
+// whose values the declaration constrains may fill a placeholder.
+private fun AriToolArg.canFillUriPlaceholder(): Boolean = when (this) {
+    is AriToolArg.StringArg -> false
+    is AriToolArg.IntArg,
+    is AriToolArg.NumberArg,
+    is AriToolArg.BoolArg,
+    is AriToolArg.EnumArg,
+    -> true
+}
+
 private fun requireUriTemplate(tool: String, uri: String, args: List<AriToolArg>) {
     require(URI_LITERAL_SCHEME.containsMatchIn(uri)) {
         "tool '$tool': uri needs a literal scheme, so no arg can choose one"
@@ -43,11 +54,15 @@ private fun requireUriTemplate(tool: String, uri: String, args: List<AriToolArg>
     } catch (e: URISyntaxException) {
         throw IllegalArgumentException("tool '$tool': uri is not a uri template", e)
     }
-    val declared = args.map { arg -> arg.name }.toSet()
+    val declared = args.associateBy { arg -> arg.name }
     val filled = URI_PLACEHOLDER.findAll(uri).map { match -> match.groupValues[1] }.toSet()
     filled.forEach { name ->
-        require(name in declared) {
+        val arg = declared[name]
+        require(arg != null) {
             "tool '$tool': uri names '${name.take(MAX_ECHOED_LENGTH)}', which is not a declared arg"
+        }
+        require(arg.canFillUriPlaceholder()) {
+            "tool '$tool': arg '$name' is free text, so it cannot fill a uri placeholder"
         }
     }
     args.filter { arg -> arg.required }.forEach { arg ->

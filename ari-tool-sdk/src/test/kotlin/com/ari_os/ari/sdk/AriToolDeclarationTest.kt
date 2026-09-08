@@ -451,10 +451,60 @@ class AriToolDeclarationTest {
     }
 
     @Test
+    fun `an int arg fills a placeholder`() {
+        assertFillsPlaceholder(AriToolArg.IntArg(name = "number", required = true))
+    }
+
+    @Test
+    fun `a number arg fills a placeholder`() {
+        assertFillsPlaceholder(AriToolArg.NumberArg(name = "ratio", required = true))
+    }
+
+    @Test
+    fun `a bool arg fills a placeholder`() {
+        assertFillsPlaceholder(AriToolArg.BoolArg(name = "readonly", required = true))
+    }
+
+    @Test
+    fun `an enum arg fills a placeholder`() {
+        assertFillsPlaceholder(
+            AriToolArg.EnumArg(name = "site", values = listOf("north", "south"), required = true),
+        )
+    }
+
+    /** The model writes the text, so a string in a placeholder is a value nothing bounds. */
+    @Test
+    fun `a string arg cannot fill a placeholder`() {
+        assertToolRejected(
+            "tool 'open_work_order': arg 'number' is free text, " +
+                "so it cannot fill a uri placeholder",
+            DOCUMENTED_URI_TOOL.replace(""""type": "int"""", """"type": "string""""),
+        ) { openWorkOrder(args = listOf(AriToolArg.StringArg(name = "number", required = true))) }
+    }
+
+    @Test
+    fun `a string arg the uri leaves out is accepted`() {
+        val tool = openWorkOrder(
+            args = listOf(
+                AriToolArg.IntArg(name = "number", required = true),
+                AriToolArg.StringArg(name = "note"),
+            ),
+        )
+
+        assertEquals("hpfield://order/{number}", tool.uri)
+    }
+
+    @Test
     fun `a repeated placeholder is accepted`() {
         val tool = openWorkOrder(uri = "hpfield://order/{number}?title={number}")
 
         assertEquals("hpfield://order/{number}?title={number}", tool.uri)
+    }
+
+    private fun assertFillsPlaceholder(arg: AriToolArg) {
+        val uri = "hpfield://order/{${arg.name}}"
+
+        assertEquals(uri, openWorkOrder(uri = uri, args = listOf(arg)).uri)
     }
 
     private fun assertArgRejected(expected: String, json: String, build: () -> AriToolArg) {

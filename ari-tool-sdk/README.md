@@ -129,18 +129,32 @@ opens the result as `ACTION_VIEW` on your package. Only a URI is allowed. Ari
 takes no action, component, extras or flags from your declaration, so a tool
 can never ask Ari to send an arbitrary intent.
 
-Every value Ari substitutes has a declared `type`, so a `{number}` is always a
-whole number and an enum arg is always one of its `values`. That is what makes
-a template safe to build a URI from.
+**A placeholder takes a constrained type only.** `int`, `number`, `bool` and
+`enum` may fill one. A `string` may not: the model writes its text, and nothing
+in your declaration limits what it writes. So a `{placeholder}` always holds a
+number, a boolean, or one of an enum's `values`.
 
 The registry checks the template as you build it:
 
 - every `{placeholder}` must name an arg declared on the same tool;
+- a `string` arg must not fill a `{placeholder}`;
 - every `required` arg of the tool must appear in the template;
 - the template must parse as a URI and start with a literal scheme, so no arg
   can choose the scheme.
 
 An optional arg the template leaves out is allowed and never reaches your app.
+A `string` arg is fine on a deeplink tool as long as the template leaves it
+out, though it then reaches nothing and is better deleted.
+
+Your deeplink target still reads the value and acts on it, so treat every
+substituted value as input to validate. The type rule bounds what can arrive.
+It does not check that the number names a work order you own.
+
+**Free-text deeplinks are not supported.** A search tool that takes a phrase
+cannot be a `deeplink`. Declare it as a `tool { }` with a `handle { }` block
+instead: your own code then receives the text, validates it, and opens your
+screen with `AriToolResult.launch(...)`. That path puts your code between the
+model's text and your app, which is where it belongs.
 
 `presentsUi` is set for you, because a deeplink tool returns no data.
 
@@ -317,9 +331,9 @@ Report a failure by returning an `AriToolResult.error(...)`, described in "The
 error envelope". A thrown exception is only a fallback: the SDK must survive
 one for IPC, so it logs the exception and returns the `app_error` code instead.
 
-`tools()` itself runs on a binder thread, once per call, never on the main
-thread. Keep it cheap, and read only state that is safe to read there. Hold the
-registry in a field when building it costs anything.
+`tools()` runs on a binder thread once per call, and on the main thread when
+Android creates your service. So read only state that is safe on both, and
+hold the registry in a field when building it costs anything.
 
 #### Reading the arguments
 
@@ -492,6 +506,9 @@ class AriToolServiceTest {
 The call enters your service where Ari enters it, so one test covers the
 permission gate, the caller, the size caps, the argument parsing and the error
 envelope. There is no second code path for a test to prove.
+
+Only a test may call it. Shipped code calls it outside a binder transaction,
+where `enforceCallingPermission` always throws.
 
 `AriToolResult.Ok.payload` reads the payload by name and type, with the same
 accessors as `ToolArgs`.
@@ -752,7 +769,7 @@ the moment the answer changes: a sign-in, a sign-out, a printer that stops
 answering.
 
 An exception from `availableTools()`, or a name in it you never declared, is
-logged as an error. Neither ends your process.
+logged as a warning. Neither ends your process.
 
 ## The two version numbers
 

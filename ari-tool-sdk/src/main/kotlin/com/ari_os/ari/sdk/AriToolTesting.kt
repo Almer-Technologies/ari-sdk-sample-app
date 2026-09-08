@@ -8,16 +8,11 @@ private const val TEST_REQUEST_ID = "test-request"
 /**
  * Runs one tool call through the binder Ari calls, and returns the result Ari reads.
  *
- * The call enters the service where Ari enters it. So it passes the permission gate, it
- * names the caller, and it applies the size caps, the argument parsing and the error
- * envelope. A test therefore reports what a real invocation reports, over one code path.
- *
- * Your test module needs three things. Set `unitTests.isReturnDefaultValues = true`, put
- * `org.json:json` on the test classpath, and call `Dispatchers.setMain` first. A missing
- * `org.json` reports no result at all. A missing main dispatcher throws.
- *
  * Only a test can call this. Shipped code calls it outside a binder transaction, where
  * `enforceCallingPermission` always throws.
+ *
+ * The test module needs `unitTests.isReturnDefaultValues = true`, `org.json:json` on the
+ * test classpath, and a main dispatcher. See "Testing a handler" in the module README.
  *
  * @param argsJson Arguments, as Ari sends them. Empty text means no arguments.
  * @param requestId Id of this invocation, and the id [AriToolCall.requestId] reports.

@@ -63,19 +63,12 @@ sealed interface AriToolResult {
         /**
          * Success that opens a screen instead of returning data.
          *
-         * A bound service is a background process, so it cannot start an activity itself.
-         * The provider hands Ari a [PendingIntent] and Ari sends it, so the activity starts
-         * as the provider app, with the provider's permissions, and may be unexported.
+         * [pendingIntent] must carry [PendingIntent.FLAG_IMMUTABLE], which is what makes
+         * Ari's send-time intent ignored.
          *
-         * [pendingIntent] must be built with [PendingIntent.FLAG_IMMUTABLE], which is what
-         * makes Ari's send-time intent ignored. A mutable PendingIntent lets the sender
-         * inject extras, because `Intent.fillIn` treats each extras key as its own field
-         * and fills every key the creator left unset.
-         *
-         * `PendingIntent.isImmutable` needs Android 12, and this SDK supports Android 11.
-         * On Android 11 the flag cannot be read, so this returns an
-         * [AriToolErrorCode.UNAVAILABLE] failure rather than a launch nothing has checked.
-         * Use a `uri` tool to open a screen on Android 11.
+         * Reading that flag needs Android 12. On Android 11 this returns an
+         * [AriToolErrorCode.UNAVAILABLE] failure instead, so declare a `uri` tool to open
+         * a screen there.
          *
          * @param spoken Text Ari speaks as it opens the screen. Write it in the language
          *   your user reads.

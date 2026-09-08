@@ -395,7 +395,7 @@ so the copy keeps the same two modules.
 
 Everything under `src/`, plus `consumer-rules.pro`, `LICENSE` and `README.md`,
 is byte-for-byte upstream — including upstream's own unit tests, which run here
-(179 of them: 16 in `ari-tool-protocol`, 163 in `ari-tool-sdk`) and are what
+(185 of them: 16 in `ari-tool-protocol`, 169 in `ari-tool-sdk`) and are what
 shows the copy is faithful rather than merely compiling. Each module's `build.gradle.kts` is the **only** file that differs:
 upstream builds with leviathan's convention plugins and version catalog, neither
 of which exists here, so each is a plain-AGP rewrite of the same settings and

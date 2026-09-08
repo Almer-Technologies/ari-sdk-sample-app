@@ -34,20 +34,9 @@ abstract class AriToolProviderService : Service() {
     /**
      * Every tool this app exposes, declared with [ariTools].
      *
-     * One registry serves both jobs: Ari reads the declarations from it, and the SDK
-     * dispatches each call to the handler declared next to them. So a tool and the
-     * code that runs it cannot drift apart.
-     *
      * The SDK calls this on a binder thread for each tool call, and on the main thread
-     * when the service is created. Keep it cheap, and read only state that is safe on
-     * both. Hold the registry in a field when building it costs anything.
-     *
-     * Each handler runs in its own coroutine on the main dispatcher. So two calls to one
-     * tool interleave at every suspension point. Guard any state they share.
-     *
-     * Ari can cancel a handler, and so can the service dying. Let [CancellationException]
-     * leave your code: never catch it, and never wrap your work in a `catch (e: Exception)`
-     * that swallows it. The SDK then reports the `cancelled` code for you.
+     * when the service is created. So read only state that is safe on both, and hold the
+     * registry in a field when building it costs anything.
      */
     abstract fun tools(): AriToolRegistry
 
@@ -55,12 +44,9 @@ abstract class AriToolProviderService : Service() {
      * Names of the declared tools this app can run right now, or null when every
      * declared tool is always available.
      *
-     * Override it only when availability changes at runtime. The SDK pushes the answer
-     * once, at service creation, so a stale view on the Ari side is corrected as soon
-     * as this process runs. Ari keeps a pushed set until the next push, so call
+     * The SDK calls this once, on the main thread, when the service is created, so never
+     * block in it. Ari keeps that answer until the next push, so call
      * [AriTools.setAvailable] yourself whenever the answer changes after that.
-     *
-     * The SDK calls this on the main thread. Keep it cheap, and never block.
      */
     open fun availableTools(): Set<String>? = null
 
@@ -233,7 +219,7 @@ abstract class AriToolProviderService : Service() {
                 throw e
             } catch (e: Exception) {
                 // A push is never worth ending the partner's process over.
-                Log.e(TAG, "the availability push at service creation failed", e)
+                Log.w(TAG, "the availability push at service creation failed", e)
             }
         }
     }
