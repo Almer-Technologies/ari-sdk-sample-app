@@ -39,6 +39,19 @@ class AriToolDeclarationTest {
         args = args,
     )
 
+    private fun openRoom(
+        uri: String? = "aridemo://room/{room_id}",
+        freeTextUriArgs: List<String> = listOf("room_id"),
+        args: List<AriToolArg> = listOf(AriToolArg.StringArg(name = "room_id", required = true)),
+    ) = AriToolDeclaration(
+        name = "open_room",
+        description = "Opens the room with this id.",
+        presentsUi = true,
+        uri = uri,
+        freeTextUriArgs = freeTextUriArgs,
+        args = args,
+    )
+
     private fun everyArgType() = AriToolDeclaration(
         name = "probe",
         description = "Probe.",
@@ -474,12 +487,86 @@ class AriToolDeclarationTest {
 
     /** The model writes the text, so a string in a placeholder is a value nothing bounds. */
     @Test
-    fun `a string arg cannot fill a placeholder`() {
+    fun `a string arg the tool does not name as free text cannot fill a placeholder`() {
         assertToolRejected(
             "tool 'open_work_order': arg 'number' is free text, " +
-                "so it cannot fill a uri placeholder",
+                "so the tool must name it in $FREE_TEXT_KEY",
             DOCUMENTED_URI_TOOL.replace(""""type": "int"""", """"type": "string""""),
         ) { openWorkOrder(args = listOf(AriToolArg.StringArg(name = "number", required = true))) }
+    }
+
+    @Test
+    fun `a string arg the tool names as free text fills a placeholder`() {
+        val tool = openRoom()
+
+        assertEquals("aridemo://room/{room_id}", tool.uri)
+        assertEquals(listOf("room_id"), tool.freeTextUriArgs)
+    }
+
+    @Test
+    fun `a free text name the tool does not declare is rejected`() {
+        assertToolRejected(
+            "tool 'open_room': $FREE_TEXT_KEY names 'ghost', which is not a declared arg",
+            FREE_TEXT_URI_TOOL.replace(""""room_id"]""", """"ghost"]"""),
+        ) { openRoom(freeTextUriArgs = listOf("ghost")) }
+    }
+
+    /** A constrained arg needs no opt in, so naming one only blunts the marker. */
+    @Test
+    fun `a free text name on a constrained arg is rejected`() {
+        assertToolRejected(
+            "tool 'open_room': $FREE_TEXT_KEY names 'room_id', which is not free text",
+            FREE_TEXT_URI_TOOL.replace(""""type": "string"""", """"type": "int""""),
+        ) { openRoom(args = listOf(AriToolArg.IntArg(name = "room_id", required = true))) }
+    }
+
+    @Test
+    fun `a free text name the uri leaves out is rejected`() {
+        assertToolRejected(
+            "tool 'open_room': $FREE_TEXT_KEY names 'note', which the uri does not fill",
+            FREE_TEXT_URI_TOOL_WITH_SPARE_NOTE,
+        ) {
+            openRoom(
+                freeTextUriArgs = listOf("room_id", "note"),
+                args = listOf(
+                    AriToolArg.StringArg(name = "room_id", required = true),
+                    AriToolArg.StringArg(name = "note"),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `a tool with no uri cannot name a free text arg`() {
+        assertToolRejected(
+            "tool 'open_room': $FREE_TEXT_KEY names 'room_id', which the uri does not fill",
+            FREE_TEXT_TOOL_WITHOUT_URI,
+        ) { openRoom(uri = null) }
+    }
+
+    @Test
+    fun `the free text opt in survives the wire`() {
+        val encoded = Json.encodeToString(AriToolDeclaration.serializer(), openRoom())
+
+        assertEquals(FREE_TEXT_URI_TOOL_WIRE, encoded)
+        assertEquals(openRoom(), decodeTool(encoded))
+    }
+
+    /** Silence is not consent: a file written before the key opts nothing in. */
+    @Test
+    fun `a uri tool without the key decodes as naming no free text arg`() {
+        assertEquals(emptyList<String>(), decodeTool(DOCUMENTED_URI_TOOL).freeTextUriArgs)
+    }
+
+    /**
+     * The cloud forbids a key it does not know, so the tools that opt nothing in must
+     * write the same object as before, even where defaults are encoded.
+     */
+    @Test
+    fun `a tool that names no free text arg leaves the key out`() {
+        val encoded = WITH_DEFAULTS.encodeToString(AriToolDeclaration.serializer(), openWorkOrder())
+
+        assertFalse(encoded, encoded.contains(FREE_TEXT_KEY))
     }
 
     @Test
@@ -587,6 +674,48 @@ class AriToolDeclarationTest {
                 """{"name":"loud","type":"bool","required":true,"description":"Loud?"},""" +
                 """{"name":"color","type":"enum","values":["red","green"],"required":true,""" +
                 """"description":"The colour."}]}"""
+
+        val FREE_TEXT_KEY = AriToolsContract.FIELD_FREE_TEXT_URI_ARGS
+
+        val FREE_TEXT_URI_TOOL = """
+            {
+              "name": "open_room",
+              "description": "Opens the room with this id.",
+              "presentsUi": true,
+              "uri": "aridemo://room/{room_id}",
+              "freeTextUriArgs": ["room_id"],
+              "args": [{ "name": "room_id", "type": "string", "required": true }]
+            }
+        """.trimIndent()
+
+        val FREE_TEXT_URI_TOOL_WITH_SPARE_NOTE = """
+            {
+              "name": "open_room",
+              "description": "Opens the room with this id.",
+              "presentsUi": true,
+              "uri": "aridemo://room/{room_id}",
+              "freeTextUriArgs": ["room_id", "note"],
+              "args": [
+                { "name": "room_id", "type": "string", "required": true },
+                { "name": "note", "type": "string" }
+              ]
+            }
+        """.trimIndent()
+
+        val FREE_TEXT_TOOL_WITHOUT_URI = """
+            {
+              "name": "open_room",
+              "description": "Opens the room with this id.",
+              "freeTextUriArgs": ["room_id"],
+              "args": [{ "name": "room_id", "type": "string", "required": true }]
+            }
+        """.trimIndent()
+
+        const val FREE_TEXT_URI_TOOL_WIRE =
+            """{"name":"open_room","description":"Opens the room with this id.",""" +
+                """"presentsUi":true,"uri":"aridemo://room/{room_id}",""" +
+                """"freeTextUriArgs":["room_id"],""" +
+                """"args":[{"name":"room_id","type":"string","required":true}]}"""
 
         // A hand-written tool, with the keys in another order. The host reads a file
         // the writer did not produce, so this shape has to keep decoding.

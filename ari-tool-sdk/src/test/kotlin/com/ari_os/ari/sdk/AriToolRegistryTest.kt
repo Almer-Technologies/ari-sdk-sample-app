@@ -166,6 +166,44 @@ class AriToolRegistryTest {
     }
 
     @Test
+    fun `a deeplink lets a named free text arg fill a placeholder`() {
+        val registry = ariTools {
+            deeplink("open_room", "Opens the room with this id.", uri = "aridemo://room/{room_id}") {
+                freeTextInUri("room_id", "The room id, as printed on the door.", required = true)
+            }
+        }
+
+        val declaration = registry.declarations.single()
+        assertEquals(listOf("room_id"), declaration.freeTextUriArgs)
+        assertEquals(
+            listOf(
+                AriToolArg.StringArg(
+                    name = "room_id",
+                    required = true,
+                    description = "The room id, as printed on the door.",
+                ),
+            ),
+            declaration.args,
+        )
+    }
+
+    @Test
+    fun `a deeplink whose placeholder takes a plain string is rejected`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            ariTools {
+                deeplink("open_room", "Opens the room with this id.", uri = "aridemo://room/{room_id}") {
+                    string("room_id", required = true)
+                }
+            }
+        }
+
+        assertTrue(
+            error.message,
+            error.message.orEmpty().contains("arg 'room_id' is free text"),
+        )
+    }
+
+    @Test
     fun `a tool declared twice is rejected`() {
         val error = assertThrows(IllegalArgumentException::class.java) {
             ariTools {

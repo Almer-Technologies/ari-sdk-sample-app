@@ -162,22 +162,18 @@ deeplink(
 Ari takes **only** the URI. No action, component, extras or flags come from the
 declaration, so a tool can never ask Ari to send an arbitrary intent.
 
-**A placeholder takes a constrained type only.** `int`, `number`, `bool` and
-`enum` may fill one. A `string` may not — the model writes its text and nothing
-in the declaration limits what it writes, so a free-text value would go straight
-into a URI another component then handles. The registry rejects it as you build
-it:
+**A placeholder takes a constrained type by default.** `int`, `number`, `bool`
+and `enum` may fill one. A plain `string` may not — the model writes its text
+and nothing in the declaration limits what it writes, so a free-text value would
+go straight into a URI another component then handles. The registry rejects it
+as you build it:
 
 ```
-tool 'show_circle': arg 'number' is free text, so it cannot fill a uri placeholder
+tool 'show_circle': arg 'number' is free text, so the tool must name it in freeTextUriArgs to fill a uri placeholder
 ```
 
 That costs this app nothing, because a circle's identity really is a whole
-number. **If your natural example needs free text, it is not a deeplink.** A
-"find the work order mentioning *cracked seal*" tool cannot be one. Declare it
-as a `tool { }` with a `handle { }` block, validate the phrase in your own code,
-and open your screen with `AriToolResult.launch(...)`. That puts your code
-between the model's text and your app, which is where it belongs.
+number. An argument that is free text *by nature* has an opt-in, covered below.
 
 The registry also checks, as you build it, that every `{placeholder}` names an
 arg of that tool, that every `required` arg appears in the template, and that
@@ -521,12 +517,35 @@ so the copy keeps the same two modules.
 
 Everything under `src/`, plus `consumer-rules.pro`, `LICENSE` and `README.md`,
 is byte-for-byte upstream — including upstream's own unit tests, which run here
-(185 of them: 16 in `ari-tool-protocol`, 169 in `ari-tool-sdk`) and are what
-shows the copy is faithful rather than merely compiling. Each module's `build.gradle.kts` is the **only** file that differs:
-upstream builds with leviathan's convention plugins and version catalog, neither
-of which exists here, so each is a plain-AGP rewrite of the same settings and
-the same dependency versions. `ari-tool-sdk/VENDORED_FROM.txt` records the
-commit.
+(197 of them: 16 in `ari-tool-protocol`, 181 in `ari-tool-sdk`) and are what
+shows the copy is faithful rather than merely compiling. Each module's
+`build.gradle.kts` is the **only** file that differs: upstream builds with
+leviathan's convention plugins and version catalog, neither of which exists
+here, so each is a plain-AGP rewrite of the same settings and the same
+dependency versions. `ari-tool-sdk/VENDORED_FROM.txt` records the commit.
+
+One exception to "run here": `ari-tool-sdk/src/androidTest` is copied but
+**never executed**. Upstream added `AriToolDeclarationInstrumentedTest` because
+Android compiles regexes with ICU and the host JVM does not, so the
+declaration's URI checks need a real device engine to be meaningful.
+`connectedDebugAndroidTest` needs a device or emulator, and neither this repo
+nor its CI has one. The build and CI compile and package that source set
+(`:ari-tool-sdk:assembleDebugAndroidTest`), so a copy that does not build fails
+loudly, but running it is yours to do:
+
+```bash
+./gradlew :ari-tool-sdk:connectedDebugAndroidTest   # needs a device
+```
+
+It is copied rather than skipped so `src/` stays a byte-for-byte copy — that is
+what keeps the next refresh a mechanical `cp` instead of a judgement call.
+
+**Refresh by diffing the whole tree, not by trusting a list of changed files.**
+Upstream's summary of what moved has been incomplete before:
+
+```bash
+diff -r -x build -x .gradle -x .kotlin <leviathan>/libs/ari-tool-sdk ./ari-tool-sdk
+```
 
 **Do not edit the copies.** Change the real modules in leviathan and re-copy.
 
@@ -556,8 +575,12 @@ when its handler is invoked through the binder (`AriToolHandlerTest`).
 What is **not** exercised is everything that needs a device: Ari discovering the
 provider, reading the asset out of the installed APK, binding the service, and
 the `BIND_TOOL_PROVIDER` permission actually turning another app away. The
-handler tests reach the service through the same binder Ari calls, but they call
-it in-process — no real Binder transaction crosses, which is exactly why the
+vendored SDK now carries an instrumented test of its own
+(`AriToolDeclarationInstrumentedTest`, for the ICU regex engine); that has not
+been run here either — it is compiled and packaged, never executed.
+
+The handler tests reach the service through the same binder Ari calls, but they
+call it in-process — no real Binder transaction crosses, which is exactly why the
 permission gate reads as a no-op there.
 
 **The deeplink is the least proven part of this sample, not the most.**

@@ -75,6 +75,23 @@ open class AriToolArgsBuilder internal constructor() {
     }
 }
 
+/** Declares the arguments of one deeplink tool. */
+class AriDeeplinkArgsBuilder internal constructor() : AriToolArgsBuilder() {
+
+    internal val freeTextUriArgs = mutableListOf<String>()
+
+    /**
+     * An argument the model fills with free text, and this tool lets fill a placeholder.
+     *
+     * Nothing in the declaration bounds the text, so your deeplink target must read the
+     * value as untrusted input. Declare every other argument with [string].
+     */
+    fun freeTextInUri(name: String, description: String = "", required: Boolean = false) {
+        string(name, description, required)
+        freeTextUriArgs += name
+    }
+}
+
 /** Declares one tool: its arguments, then the code that runs it. */
 class AriToolBuilder internal constructor(private val name: String) : AriToolArgsBuilder() {
 
@@ -133,8 +150,9 @@ class AriToolsBuilder internal constructor() {
         description: String,
         uri: String,
         confirm: Boolean = false,
-        build: AriToolArgsBuilder.() -> Unit = {},
+        build: AriDeeplinkArgsBuilder.() -> Unit = {},
     ) {
+        val builder = AriDeeplinkArgsBuilder().apply(build)
         tools += AriTool(
             declaration = AriToolDeclaration(
                 name = name,
@@ -142,7 +160,8 @@ class AriToolsBuilder internal constructor() {
                 confirm = confirm,
                 presentsUi = true,
                 uri = uri,
-                args = AriToolArgsBuilder().apply(build).args.toList(),
+                freeTextUriArgs = builder.freeTextUriArgs.toList(),
+                args = builder.args.toList(),
             ),
             handler = null,
         )

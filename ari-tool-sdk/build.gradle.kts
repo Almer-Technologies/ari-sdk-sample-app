@@ -3,9 +3,9 @@
 // This file is the ONLY part of the module that is not upstream's, because
 // upstream builds it with leviathan's convention plugins. It reproduces what
 // those plugins configure — SDK levels, the src/main/kotlin source dir,
-// kotlinx.serialization, default-returning unit tests — with plain AGP, so a
-// partner can build the sample without the monorepo. Versions match
-// leviathan's version catalog.
+// kotlinx.serialization, default-returning unit tests, the instrumentation
+// runner — with plain AGP, so a partner can build the sample without the
+// monorepo. Versions match leviathan's version catalog.
 //
 // Do not edit anything under src/ — see VENDORED_FROM.txt.
 // AGP 9+ has built-in Kotlin support — the `org.jetbrains.kotlin.android`
@@ -23,10 +23,15 @@ android {
     defaultConfig {
         // A monorepo bump must not raise a partner's floor, so pin it here.
         minSdk = 30
+
+        // What leviathan's AndroidLibraryConventionPlugin sets. Without it the
+        // vendored androidTest source set builds but has no runner to launch it.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     // leviathan's convention plugin registers src/main/kotlin; plain AGP does not.
     sourceSets["main"].kotlin.srcDir("src/main/kotlin")
+    sourceSets["androidTest"].kotlin.srcDir("src/androidTest/kotlin")
 
     // What leviathan's AndroidLibraryConventionPlugin sets. AriToolProviderService
     // is built directly in a unit test, so the stubbed android.jar must return
@@ -62,4 +67,15 @@ dependencies {
     // PendingIntent has no public constructor, and the android unit-test jar
     // builds none, so a launch test needs a mocked instance.
     testImplementation("io.mockk:mockk:1.13.17")
+
+    // Android compiles a regex with ICU, so the declaration checks need a test
+    // that runs on a device. Test-only: neither reaches a partner's classpath.
+    //
+    // NOTHING IN THIS REPO RUNS THESE. connectedDebugAndroidTest needs a
+    // connected device or emulator, and CI has neither. They are vendored so
+    // that src/ stays a byte-for-byte copy of upstream, and so a partner with a
+    // headset can run ./gradlew :ari-tool-sdk:connectedDebugAndroidTest. The
+    // build only compiles them, via :ari-tool-sdk:assembleDebugAndroidTest.
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

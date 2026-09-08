@@ -106,6 +106,10 @@ model reads to pick a value:
 `values`, because only `AriToolArg.EnumArg` holds them, so a value list on any
 other type cannot be written.
 
+`deeplink()` adds a sixth builder, `freeTextInUri`. It declares a `string` arg
+and lets that arg fill a `{placeholder}`. See "Opening a screen with a
+deeplink".
+
 Every builder produces the same `AriToolDeclaration` and `AriToolArg` the SDK
 already defines, so nothing about the wire format changes.
 
@@ -129,32 +133,58 @@ opens the result as `ACTION_VIEW` on your package. Only a URI is allowed. Ari
 takes no action, component, extras or flags from your declaration, so a tool
 can never ask Ari to send an arbitrary intent.
 
-**A placeholder takes a constrained type only.** `int`, `number`, `bool` and
-`enum` may fill one. A `string` may not: the model writes its text, and nothing
-in your declaration limits what it writes. So a `{placeholder}` always holds a
-number, a boolean, or one of an enum's `values`.
+**A placeholder takes a constrained type by default.** `int`, `number`, `bool`
+and `enum` may fill one. A `string` may not, because the model writes its text
+and nothing in your declaration limits what it writes.
+
+Some values are free text by nature. A room id is one. Declare such an argument
+with `freeTextInUri` instead of `string`:
+
+```kotlin
+deeplink(
+    "open_room",
+    "Opens the room with this id.",
+    uri = "aridemo://room/{room_id}",
+) {
+    freeTextInUri("room_id", "The room id, as printed on the door.", required = true)
+}
+```
+
+That writes a `freeTextUriArgs` list next to the `uri` in your asset. The one
+argument nothing bounds is then named in your own source and in your own file.
 
 The registry checks the template as you build it:
 
 - every `{placeholder}` must name an arg declared on the same tool;
-- a `string` arg must not fill a `{placeholder}`;
+- a `string` arg fills a `{placeholder}` only through `freeTextInUri`;
+- every name in `freeTextUriArgs` must be a `string` arg the template fills;
 - every `required` arg of the tool must appear in the template;
 - the template must parse as a URI and start with a literal scheme, so no arg
   can choose the scheme.
 
 An optional arg the template leaves out is allowed and never reaches your app.
-A `string` arg is fine on a deeplink tool as long as the template leaves it
-out, though it then reaches nothing and is better deleted.
+A plain `string` arg is fine on a deeplink tool as long as the template leaves
+it out, though it then reaches nothing and is better deleted.
 
-Your deeplink target still reads the value and acts on it, so treat every
-substituted value as input to validate. The type rule bounds what can arrive.
-It does not check that the number names a work order you own.
+**What `freeTextInUri` is, and is not.** You write your own declaration, so
+nothing stops you naming any argument here. It is no wall against a provider
+that means harm. It stops the accidental case, where a `string` reaches a URI
+because nobody looked. And it marks the deliberate case, so one search over
+your source finds every free-text deeplink you ship.
 
-**Free-text deeplinks are not supported.** A search tool that takes a phrase
-cannot be a `deeplink`. Declare it as a `tool { }` with a `handle { }` block
-instead: your own code then receives the text, validates it, and opens your
-screen with `AriToolResult.launch(...)`. That path puts your code between the
-model's text and your app, which is where it belongs.
+Ari percent-encodes each value before it fills the template, so a value stays
+inside the one URI component it fills. It cannot add a path segment, a query
+parameter or a fragment, and it cannot change the scheme. It is still text the
+model chose, so your deeplink target must validate it like any other untrusted
+input.
+
+An Ari older than the key drops it, and then drops the tool, because it sees a
+`string` in a placeholder. Your other tools still load.
+
+**Prefer a handler when you have a service.** A search tool that takes a phrase
+is better as a `tool { }` with a `handle { }` block: your own code receives the
+text, validates it, and opens your screen with `AriToolResult.launch(...)`. Use
+`freeTextInUri` when the deeplink is the whole integration.
 
 `presentsUi` is set for you, because a deeplink tool returns no data.
 
@@ -246,6 +276,9 @@ same text if you want to write it another way.
   accepts your version when it is at or above its own floor.
 - `capabilities` names the optional parts of that surface you implement. The
   writer lists every one this SDK provides. A hand-written file can list fewer.
+- `freeTextUriArgs` names the `string` args of one tool that may fill a
+  `{placeholder}`. `freeTextInUri` writes it. A tool that names none omits the
+  key, and an omitted key opts nothing in.
 - A key with its default value is left out, so the file stays short.
 
 The file carries no package id. Ari takes it from your installed APK, so a

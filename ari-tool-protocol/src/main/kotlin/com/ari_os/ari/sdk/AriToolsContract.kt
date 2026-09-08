@@ -56,6 +56,9 @@ object AriToolsContract {
     /** Wire key carrying the provider's capability names in [DECLARATION_ASSET]. */
     const val FIELD_CAPABILITIES = "capabilities"
 
+    /** Wire key naming the args of one tool that may fill a uri placeholder with free text. */
+    const val FIELD_FREE_TEXT_URI_ARGS = "freeTextUriArgs"
+
     /** Capability of a provider that implements `IAriToolProvider.cancel`. */
     const val CAPABILITY_CANCEL = "cancel"
 

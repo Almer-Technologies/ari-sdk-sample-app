@@ -60,6 +60,12 @@ class AriToolsAssetTest {
         }
     }
 
+    private fun freeTextDeeplink() = ariTools(label = LABEL) {
+        deeplink("open_room", "Opens the room with this id.", uri = "aridemo://room/{room_id}") {
+            freeTextInUri("room_id", "The room id, as printed on the door.", required = true)
+        }
+    }
+
     @Test
     fun `the asset holds the fixed key order and ends with a newline`() {
         assertEquals(BOTH_KINDS_ASSET, AriToolsAsset.encode(bothKinds()))
@@ -94,6 +100,27 @@ class AriToolsAssetTest {
         assertEquals(WITHOUT_NEW_FIELDS_ASSET, encoded)
         assertFalse(encoded, encoded.contains("presentsUi"))
         assertFalse(encoded, encoded.contains("uri"))
+    }
+
+    @Test
+    fun `a free text deeplink round trips through the asset`() {
+        val registry = freeTextDeeplink()
+
+        val encoded = AriToolsAsset.encode(registry)
+
+        assertTrue(encoded, encoded.contains(""""freeTextUriArgs": ["""))
+        val decoded = Json.decodeFromString(AriToolDeclarationFile.serializer(), encoded)
+        assertEquals(registry.declarations, decoded.tools)
+    }
+
+    /** Silence is not consent: an asset that omits the key opts nothing in. */
+    @Test
+    fun `an asset without the key decodes as naming no free text arg`() {
+        val encoded = AriToolsAsset.encode(bothKinds())
+
+        assertFalse(encoded, encoded.contains("freeTextUriArgs"))
+        val decoded = Json.decodeFromString(AriToolDeclarationFile.serializer(), encoded)
+        assertTrue(decoded.tools.all { tool -> tool.freeTextUriArgs.isEmpty() })
     }
 
     @Test

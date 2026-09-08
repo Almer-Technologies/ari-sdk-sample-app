@@ -17,7 +17,9 @@
 # WHAT NOTHING HERE COVERS: the device. No emulator, no headset. The
 # permission gate is a no-op under the android unit-test jar and a launch
 # result cannot report PendingIntent.isImmutable there, so neither is
-# exercised. See "Not verified on hardware" in the README.
+# exercised. The vendored SDK's androidTest source set is compiled and packaged
+# below but never executed, because connectedDebugAndroidTest needs a device.
+# See "Not verified on hardware" in the README.
 #
 # RUNNER: ubuntu-latest, a hosted runner. This build needs a JDK and an Android
 # SDK and nothing else — no signing keys, no emulator, no Xcode, no
@@ -73,13 +75,20 @@ jobs:
       # Every module named explicitly, so the two vendored SDK modules are
       # visibly covered — nothing else in the repo runs their suites. Add a new
       # module here as well as to settings.gradle.kts.
+      # assembleDebugAndroidTest COMPILES AND PACKAGES the vendored SDK's
+      # instrumented tests without running them — no device is involved. It is
+      # here because upstream keeps a device test for the declaration's regexes
+      # (Android compiles them with ICU, the host jvm does not), and without
+      # this task nothing in the repo would compile that source set, so a
+      # re-vendor could land a copy that does not build and CI would stay green.
       - name: Build and test
         run: |
           ./gradlew --no-daemon --stacktrace \
             :app:assembleDebug \
             :app:testDebugUnitTest \
             :ari-tool-sdk:testDebugUnitTest \
-            :ari-tool-protocol:testDebugUnitTest
+            :ari-tool-protocol:testDebugUnitTest \
+            :ari-tool-sdk:assembleDebugAndroidTest
 
       # The asset is what Ari reads out of the installed APK, so prove it is in
       # there and matches the committed source. The drift test already ties the

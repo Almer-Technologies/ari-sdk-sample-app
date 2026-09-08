@@ -26,17 +26,21 @@ internal fun requireDeclaredArg(name: String, description: String) {
     requireDescriptionFits("arg '$name'", description)
 }
 
-private val URI_PLACEHOLDER = Regex("""\{([^{}]*)}""")
-
-private val URI_LITERAL_SCHEME = Regex("""^[a-zA-Z][a-zA-Z0-9+.\-]*:""")
+// Android compiles a regex with ICU, which rejects a closing brace no quantifier
+// opened; the host jvm accepts one. Keep braces escaped, and keep the patterns in
+// an object, so a rejected one kills only the uri check, not the whole file.
+private object UriPatterns {
+    val PLACEHOLDER = Regex("""\{([^{}]*)\}""")
+    val LITERAL_SCHEME = Regex("""^[a-zA-Z][a-zA-Z0-9+.\-]*:""")
+}
 
 // java.net.URI rejects the braces of a template, so the scheme and the shape
 // are checked on a copy with every placeholder replaced by this.
 private const val PLACEHOLDER_STAND_IN = "x"
 
-// Ari interpolates the value into a uri another app then handles, so only a type
-// whose values the declaration constrains may fill a placeholder.
-private fun AriToolArg.canFillUriPlaceholder(): Boolean = when (this) {
+// The declaration bounds what these types hold. Free text is the model's own, so a
+// tool names it in AriToolsContract.FIELD_FREE_TEXT_URI_ARGS to fill a placeholder.
+private fun AriToolArg.isConstrained(): Boolean = when (this) {
     is AriToolArg.StringArg -> false
     is AriToolArg.IntArg,
     is AriToolArg.NumberArg,
@@ -45,24 +49,53 @@ private fun AriToolArg.canFillUriPlaceholder(): Boolean = when (this) {
     -> true
 }
 
-private fun requireUriTemplate(tool: String, uri: String, args: List<AriToolArg>) {
-    require(URI_LITERAL_SCHEME.containsMatchIn(uri)) {
+private fun placeholderNames(uri: String): Set<String> =
+    UriPatterns.PLACEHOLDER.findAll(uri).map { match -> match.groupValues[1] }.toSet()
+
+private fun requireFreeTextUriArgs(
+    tool: String,
+    uri: String?,
+    freeTextUriArgs: List<String>,
+    args: List<AriToolArg>,
+) {
+    if (freeTextUriArgs.isEmpty()) return
+    val key = AriToolsContract.FIELD_FREE_TEXT_URI_ARGS
+    val declared = args.associateBy { arg -> arg.name }
+    val filled = uri?.let(::placeholderNames).orEmpty()
+    freeTextUriArgs.forEach { name ->
+        val arg = declared[name]
+        require(arg != null) {
+            "tool '$tool': $key names '${name.take(MAX_ECHOED_LENGTH)}', which is not a declared arg"
+        }
+        require(!arg.isConstrained()) { "tool '$tool': $key names '$name', which is not free text" }
+        require(name in filled) { "tool '$tool': $key names '$name', which the uri does not fill" }
+    }
+}
+
+private fun requireUriTemplate(
+    tool: String,
+    uri: String,
+    args: List<AriToolArg>,
+    freeTextUriArgs: List<String>,
+) {
+    require(UriPatterns.LITERAL_SCHEME.containsMatchIn(uri)) {
         "tool '$tool': uri needs a literal scheme, so no arg can choose one"
     }
     try {
-        URI(uri.replace(URI_PLACEHOLDER, PLACEHOLDER_STAND_IN))
+        URI(uri.replace(UriPatterns.PLACEHOLDER, PLACEHOLDER_STAND_IN))
     } catch (e: URISyntaxException) {
         throw IllegalArgumentException("tool '$tool': uri is not a uri template", e)
     }
     val declared = args.associateBy { arg -> arg.name }
-    val filled = URI_PLACEHOLDER.findAll(uri).map { match -> match.groupValues[1] }.toSet()
+    val filled = placeholderNames(uri)
     filled.forEach { name ->
         val arg = declared[name]
         require(arg != null) {
             "tool '$tool': uri names '${name.take(MAX_ECHOED_LENGTH)}', which is not a declared arg"
         }
-        require(arg.canFillUriPlaceholder()) {
-            "tool '$tool': arg '$name' is free text, so it cannot fill a uri placeholder"
+        require(arg.isConstrained() || name in freeTextUriArgs) {
+            "tool '$tool': arg '$name' is free text, so the tool must name it in " +
+                "${AriToolsContract.FIELD_FREE_TEXT_URI_ARGS} to fill a uri placeholder"
         }
     }
     args.filter { arg -> arg.required }.forEach { arg ->
@@ -77,6 +110,9 @@ private fun requireUriTemplate(tool: String, uri: String, args: List<AriToolArg>
  * @property uri Deeplink template Ari opens instead of binding the provider, with one
  *   `{arg_name}` placeholder per value to fill. Ari opens it as `ACTION_VIEW` on the
  *   provider's package, and takes no action, component, extras or flags from here.
+ * @property freeTextUriArgs Names of args this tool lets fill a placeholder with free text.
+ *   A partner writes its own declaration, so this only stops an accidental free-text
+ *   deeplink and marks a deliberate one. A hostile partner can name any arg here.
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -88,15 +124,19 @@ data class AriToolDeclaration(
     val presentsUi: Boolean = false,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val uri: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val freeTextUriArgs: List<String> = emptyList(),
     val args: List<AriToolArg> = emptyList(),
 ) {
     init {
         requireDeclaredName("tool", name)
         require(description.isNotEmpty()) { "tool '$name': description is required" }
         requireDescriptionFits("tool '$name'", description)
+        // Before the template check, so a wrong name reports itself, not the placeholder.
+        requireFreeTextUriArgs(name, uri, freeTextUriArgs, args)
         uri?.let { template ->
             require(presentsUi) { "tool '$name': a uri tool returns no data, so presentsUi must be true" }
-            requireUriTemplate(name, template, args)
+            requireUriTemplate(name, template, args, freeTextUriArgs)
         }
     }
 }
