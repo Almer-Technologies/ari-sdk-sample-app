@@ -1,0 +1,192 @@
+package com.example.aridemo
+
+import com.ari_os.ari.sdk.AriToolErrorCode
+import com.ari_os.ari.sdk.AriToolResult
+import com.ari_os.ari.sdk.invokeToolInTest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.json.JSONObject
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * Every tool this app declares, run end to end.
+ *
+ * `invokeToolInTest` enters [AriToolService] through the same binder Ari calls,
+ * so each of these covers the permission gate, the argument parsing, the
+ * handler and the error envelope over one code path. There is no second path a
+ * test could prove instead: what passes here is what a real invocation does.
+ *
+ * The other two test classes stop at the declaration — [AriToolServiceTest]
+ * reads the registry and [AriToolsAssetTest] compares it to the committed
+ * asset. Neither reaches a handler, so neither would notice `add_circle`
+ * returning the wrong number.
+ *
+ * The `@OptIn` is needed because `Dispatchers.setMain`,
+ * `UnconfinedTestDispatcher` and `Dispatchers.resetMain` are all marked
+ * [ExperimentalCoroutinesApi] and this project sets no opt-in compiler flag.
+ * Leaving it off is three warnings rather than a failed build, so it is hygiene
+ * — but leviathan opts in globally and a partner project does not, which is why
+ * the SDK's README shows the annotation.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AriToolHandlerTest {
+
+    /**
+     * Each handler runs on the main dispatcher, which a JVM test has to supply.
+     * `Unconfined` runs it on the calling thread, so the result is there by the
+     * time `invokeToolInTest` returns.
+     */
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        CircleState.reset()
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `add_circle reports the number, the colour and the new total`() {
+        val payload = ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        assertEquals(2, payload.int("number"))
+        assertEquals("blue", payload.string("color"))
+        assertEquals(2, payload.int("total"))
+    }
+
+    /** The default the declaration promises. Ari sends no `color` at all here. */
+    @Test
+    fun `add_circle with no colour uses the default the declaration names`() {
+        val payload = ok(invoke("add_circle"))
+
+        assertEquals(CircleState.DEFAULT_COLOR, payload.string("color"))
+    }
+
+    /**
+     * A full screen is a refusal, not a crash, and `unavailable` is the code
+     * that tells Ari a retry can work once the user removes one.
+     */
+    @Test
+    fun `add_circle past the limit reports unavailable`() {
+        repeat(CircleState.MAX_CIRCLES - 1) { invoke("add_circle") }
+
+        val failure = failure(invoke("add_circle"))
+
+        assertEquals(AriToolErrorCode.UNAVAILABLE.wireValue, failure.code)
+        assertTrue(failure.message, "${CircleState.MAX_CIRCLES}" in failure.message.orEmpty())
+    }
+
+    /**
+     * The property the whole sample is built around: removing a circle leaves a
+     * gap rather than renumbering, so a batch of removals from one
+     * `list_circles` cannot hit the wrong circle.
+     */
+    @Test
+    fun `remove_circle leaves the other numbers where they were`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val removed = ok(invoke("remove_circle", """{"number":2}"""))
+
+        assertEquals(2, removed.int("removed"))
+        assertEquals(2, removed.int("total"))
+        assertEquals(listOf(1, 3), CircleState.activeNumbers())
+    }
+
+    /**
+     * `number` is declared required, so the handler reads it with the strict
+     * accessor and the SDK turns a missing value into the coded envelope that
+     * lets Ari ask the model again. The app writes no message for this.
+     */
+    @Test
+    fun `remove_circle without its required argument names the argument`() {
+        val failure = failure(invoke("remove_circle", "{}"))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("arg 'number' is missing", failure.message)
+    }
+
+    /** Numbers have gaps, so "no such circle" has to say which ones there are. */
+    @Test
+    fun `remove_circle of a number that is not there names the ones that are`() {
+        val failure = failure(invoke("remove_circle", """{"number":7}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("There's no circle 7. The circles are 1.", failure.message)
+    }
+
+    @Test
+    fun `set_circle_color with no number recolours every circle`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val payload = ok(invoke("set_circle_color", """{"color":"pink"}"""))
+
+        assertEquals(3, payload.int("changed"))
+        assertEquals(
+            listOf("pink", "pink", "pink"),
+            CircleState.circles.value.map { circle -> circle.colorName },
+        )
+    }
+
+    /**
+     * The declaration constrains the model, not the wire. Nothing in the SDK
+     * checks a value against an `enum` arg's `values`, so `unknownColor` in
+     * [AriToolService] is the backstop that answers an off-list colour — and it
+     * is reachable, which is why it is still there.
+     */
+    @Test
+    fun `a colour outside the declared list is the app's own refusal`() {
+        val failure = failure(invoke("set_circle_color", """{"color":"cerulean"}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertTrue(failure.message, "cerulean" in failure.message.orEmpty())
+    }
+
+    /**
+     * How Ari answers "what's on screen?" — it keys the colours by number.
+     *
+     * `circles` is a nested object, and `ToolArgs` reads flat values only: an
+     * object is never text, so `payload.string("circles")` throws. Read a
+     * nested payload through `org.json` instead, off `payload.toString()`.
+     */
+    @Test
+    fun `list_circles reports every circle keyed by its permanent number`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("remove_circle", """{"number":1}"""))
+
+        val payload = ok(invoke("list_circles"))
+
+        assertEquals(1, payload.int("total"))
+        val circles = JSONObject(payload.toString()).getJSONObject("circles")
+        assertEquals(1, circles.length())
+        assertEquals("green", circles.getString("2"))
+    }
+
+    /**
+     * A name this app never declared. The SDK answers it from the registry, so
+     * a stale tool in Ari's view cannot reach a handler that no longer exists.
+     */
+    @Test
+    fun `a tool this app never declared reports unknown_tool`() {
+        val failure = failure(invoke("take_note"))
+
+        assertEquals(AriToolErrorCode.UNKNOWN_TOOL.wireValue, failure.code)
+    }
+
+    private fun invoke(toolName: String, argsJson: String = ""): AriToolResult =
+        AriToolService().invokeToolInTest(toolName, argsJson)
+
+    private fun ok(result: AriToolResult) = (result as AriToolResult.Ok).payload
+
+    private fun failure(result: AriToolResult) = result as AriToolResult.Failure
+}

@@ -98,6 +98,20 @@ object CircleState {
         if (background.luminance() > 0.5f) Color.Black else Color.White
 
     /**
+     * Back to the one red circle a fresh process starts with.
+     *
+     * This exists because the state is a process-wide singleton and JUnit runs
+     * every test in one process, so without it the first test's circles would
+     * decide what the second test sees. A production app holding this in a
+     * repository injected into the service and the UI would get a fresh
+     * instance per test and need nothing like this — see the README.
+     */
+    fun reset() {
+        nextNumber.set(2)
+        _circles.value = listOf(Circle(1, DEFAULT_COLOR))
+    }
+
+    /**
      * Append a circle with a fresh, never-reused number.
      *
      * @param colorName Colour for the new circle; must be a known name.
