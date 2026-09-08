@@ -26,7 +26,11 @@ private const val LOG_TAG = "AriToolResult"
 sealed interface AriToolResult {
 
     /** A successful invocation carrying an optional payload. Build one with [ok]. */
-    class Ok internal constructor(internal val data: JSONObject) : AriToolResult
+    class Ok internal constructor(internal val data: JSONObject) : AriToolResult {
+
+        /** What the tool returned, read by name and type. */
+        val payload: ToolArgs = ToolArgs(data)
+    }
 
     /**
      * A screen Ari opens for the provider app. Build one with [launch].

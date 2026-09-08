@@ -17,6 +17,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -94,6 +95,11 @@ class AriToolProviderServiceTest {
         fun callCancel() {
             current = "cancel"
             (onBind(null) as IAriToolProvider).cancel("req-1")
+        }
+
+        fun callHarness() {
+            current = "harness"
+            invokeToolInTest(TOOL)
         }
     }
 
@@ -356,6 +362,64 @@ class AriToolProviderServiceTest {
         service.callCancel()
 
         assertEquals(listOf("invoke", "cancel"), service.gated)
+    }
+
+    /**
+     * The harness must enter the service where Ari enters it. A harness that reached the
+     * handler another way would let a partner's test prove a path Ari never takes.
+     */
+    @Test
+    fun `the test harness passes through the permission gate`() {
+        val service = PermissionRecordingService()
+
+        service.callHarness()
+
+        assertEquals(listOf("harness"), service.gated)
+    }
+
+    @Test
+    fun `the test harness reports the caller the service names`() {
+        val service = CallerRecordingService("com.ari_os.ari")
+
+        val result = service.invokeToolInTest(TOOL)
+
+        assertEquals("com.ari_os.ari", (result as AriToolResult.Ok).payload.string("caller"))
+        assertEquals("test-request", result.payload.string("request"))
+    }
+
+    @Test
+    fun `the test harness maps a throwing handler to the coded envelope, not to a throw`() {
+        val service = serviceThrowing(IllegalStateException("row 7 of table secrets is null"))
+
+        val result = service.invokeToolInTest(TOOL)
+
+        val failure = result as AriToolResult.Failure
+        assertEquals(AriToolsContract.ERROR_CODE_APP_ERROR, failure.code)
+        assertEquals("the app could not run this tool", failure.message)
+    }
+
+    @Test
+    fun `the test harness carries the pending intent of a launch result`() {
+        val pendingIntent = mockk<PendingIntent>()
+        val launch = AriToolResult.launch(pendingIntent, "Opening", immutable = true)
+
+        val result = serviceReturning(launch).invokeToolInTest(TOOL)
+
+        assertSame(pendingIntent, (result as AriToolResult.Launch).pendingIntent)
+        assertEquals("Opening", result.spoken)
+    }
+
+    @Test
+    fun `the test harness throws when the tool reports no result`() {
+        val service = RegistryService {
+            tool(TOOL, DESCRIPTION) { handle { awaitCancellation() } }
+        }
+
+        val thrown = assertThrows(IllegalStateException::class.java) {
+            service.invokeToolInTest(TOOL)
+        }
+
+        assertTrue(requireNotNull(thrown.message).contains("reported no result"))
     }
 
     @Test

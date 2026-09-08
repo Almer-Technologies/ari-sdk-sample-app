@@ -1,4 +1,4 @@
-c786d3abf4b76bd81728fb0787ba3cba44b1dba2
+2df13380e3a365c3954a06629d3c700572a5a571
 leviathan libs/ari-tool-protocol and libs/ari-tool-sdk, branch MOBILE-2340-ari-tool-sdk
 
 Both vendored modules are byte-for-byte upstream except their build.gradle.kts.

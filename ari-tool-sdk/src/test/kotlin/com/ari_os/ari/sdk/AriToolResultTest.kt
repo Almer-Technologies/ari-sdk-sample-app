@@ -194,6 +194,29 @@ class AriToolResultTest {
     }
 
     @Test
+    fun `the payload of an ok result reads what the builder wrote`() {
+        val ok = AriToolResult.ok {
+            putString("color", "blue")
+            putInt("count", 3)
+            putBool("loud", true)
+        }
+
+        val payload = (ok as AriToolResult.Ok).payload
+        assertEquals("blue", payload.string("color"))
+        assertEquals(3, payload.int("count"))
+        assertEquals(true, payload.bool("loud"))
+    }
+
+    @Test
+    fun `the payload of a decoded ok envelope reads the data Ari received`() {
+        val sent = AriToolResult.ok { putString("color", "blue") }
+
+        val read = AriToolResult.fromJson(sent.toJson())
+
+        assertEquals("blue", (read as AriToolResult.Ok).payload.string("color"))
+    }
+
+    @Test
     fun `a failure with only text keeps a null code`() {
         val failure = AriToolResult.fromJson(AriToolResult.error("no").toJson())
 

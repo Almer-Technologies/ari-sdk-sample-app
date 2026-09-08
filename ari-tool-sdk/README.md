@@ -18,7 +18,7 @@ The SDK ships as two artifacts under the group `com.ari_os.ari`.
 | Artifact | Holds | Depends on |
 |---|---|---|
 | `ari-tool-protocol` | The two AIDL interfaces and `AriToolsContract`. The frozen wire surface. | nothing |
-| `ari-tool-sdk` | `AriToolProviderService`, the `ariTools { }` registry, `AriToolsAsset`, `AriTools`, `AriToolResult`, `AriToolErrorCode`, `AriToolCall`, `ToolArgs`, the declaration models. | `ari-tool-protocol`, with `api` scope |
+| `ari-tool-sdk` | `AriToolProviderService`, the `ariTools { }` registry, `AriToolsAsset`, `AriTools`, `AriToolResult`, `AriToolErrorCode`, `AriToolCall`, `ToolArgs`, `invokeToolInTest`, the declaration models. | `ari-tool-protocol`, with `api` scope |
 
 Depend on `ari-tool-sdk` only. It exposes the contract with `api` scope, so the
 protocol arrives with it:
@@ -83,7 +83,11 @@ The rules the registry enforces:
   one provider claims. The registry rejects a ninth tool, so you see it in your
   own build, not in Ari's log.
 
-`confirm = true` on either builder asks the user before the tool runs.
+**Every app tool is confirmed.** Ari asks the user before it runs any tool, and
+shows the argument values the call will send. You cannot opt out. The `confirm`
+flag on either builder is not read. Your declaration comes from your own APK, so
+nothing in it can win an exemption. Set the flag if it documents your intent — a
+later version may honour it.
 
 #### The argument builders
 
@@ -176,6 +180,8 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 ```
+
+"Testing a handler" adds the two dependencies a test needs to run a tool call.
 
 `AriToolsAsset` takes the **assets folder**, not a file name, and always writes
 `AriToolsContract.DECLARATION_ASSET` inside it. The path is fixed, so a typo
@@ -344,7 +350,8 @@ An accessor reads a value of another type when the meaning is unambiguous:
 `null` instead of guessing when the value would lose information: `1.5` is not
 an `int`, `"yes"` is not a `bool`, and an object or an array is never text.
 
-For your own unit tests, build the arguments and the call directly:
+"Testing a handler" runs a whole tool call from a unit test. To test a helper
+below the handler, build the arguments and the call directly:
 
 ```kotlin
 val args = ToolArgs(JSONObject("""{"color":"red"}"""))
@@ -446,6 +453,84 @@ arrived in Android 12, so on Android 11 nothing can check the flag, and
 `AriToolResult.launch(...)` returns an `unavailable` failure instead of a
 launch the SDK cannot vouch for. Declare a `deeplink` tool to open a screen on
 Android 11.
+
+#### Testing a handler
+
+`invokeToolInTest` runs one tool call from a unit test and returns the result
+Ari reads:
+
+```kotlin
+@OptIn(ExperimentalCoroutinesApi::class)
+class AriToolServiceTest {
+
+    @Before
+    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+
+    @After
+    fun tearDown() = Dispatchers.resetMain()
+
+    @Test
+    fun `set_circle_color returns the colour it set`() {
+        val result = AriToolService().invokeToolInTest(
+            "set_circle_color",
+            """{"color":"red"}""",
+        )
+
+        assertEquals("red", (result as AriToolResult.Ok).payload.string("color"))
+    }
+
+    @Test
+    fun `a colour the model left out is the model's mistake`() {
+        val result = AriToolService().invokeToolInTest("set_circle_color", "{}")
+
+        val failure = result as AriToolResult.Failure
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+    }
+}
+```
+
+The call enters your service where Ari enters it, so one test covers the
+permission gate, the caller, the size caps, the argument parsing and the error
+envelope. There is no second code path for a test to prove.
+
+`AriToolResult.Ok.payload` reads the payload by name and type, with the same
+accessors as `ToolArgs`.
+
+Your test module needs three things:
+
+```kotlin
+android {
+    testOptions { unitTests.isReturnDefaultValues = true }
+}
+
+dependencies {
+    testImplementation("org.json:json:<version>")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:<version>")
+}
+```
+
+`Dispatchers.resetMain` is an experimental coroutines API, so the test class
+needs the `@OptIn` the example shows.
+
+Each missing piece fails in its own way. Without `Dispatchers.setMain` the call
+throws and names the missing dispatcher. Without `org.json` the stubbed one
+returns defaults, the call reports nothing at all, and `invokeToolInTest` throws
+to say so.
+
+To name the caller your handler reads, override `callingPackage()` in a test
+subclass of your service:
+
+```kotlin
+class AriCallingToolService : AriToolService() {
+    override fun callingPackage() = "com.ari_os.ari"
+}
+```
+
+A JVM unit test cannot cover two things. The permission gate is a framework
+call that the android unit-test jar turns into a no-op, so no test can show it
+denying a caller. `AriToolResult.launch(...)` needs `PendingIntent.isImmutable`,
+which the same jar cannot report, so a launch result reads as an `unavailable`
+failure. Cover both on a device.
 
 #### Size caps
 

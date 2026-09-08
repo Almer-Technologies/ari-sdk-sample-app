@@ -98,7 +98,7 @@ class AriToolsBuilder internal constructor() {
     /**
      * A tool Ari runs by binding your service.
      *
-     * @param confirm Whether Ari asks the user before it runs the tool.
+     * @param confirm Not read yet. Ari asks the user before it runs any tool.
      * @param presentsUi Whether the tool opens a screen and returns no data.
      */
     fun tool(

@@ -11,7 +11,11 @@ import kotlin.math.truncate
 class AriToolArgumentException internal constructor(message: String) :
     IllegalArgumentException(message)
 
-/** Arguments of one tool invocation, read by name and type. */
+/**
+ * One JSON object of a tool invocation, read by name and type.
+ *
+ * It holds the arguments Ari sends, or the payload a tool returns.
+ */
 class ToolArgs(private val values: JSONObject) {
 
     /** Whether [name] holds a value that is not JSON null. */

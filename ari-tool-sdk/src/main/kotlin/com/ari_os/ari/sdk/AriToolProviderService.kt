@@ -110,8 +110,13 @@ abstract class AriToolProviderService : Service() {
         "an Ari tool call needs ${AriToolsContract.PERMISSION_BIND_TOOL_PROVIDER}",
     )
 
-    /** Caller of the current binder transaction. Only correct on the binder thread. */
-    internal open fun callingPackage(): String {
+    /**
+     * Caller of the current binder transaction. Only correct on the binder thread.
+     *
+     * Override it only in a test, to name the caller a handler should see. An override in
+     * shipped code makes [AriToolCall.callerPackage] report a caller that never called.
+     */
+    protected open fun callingPackage(): String {
         val manager = packageManager ?: return ""
         val uid = Binder.getCallingUid()
         return manager.getPackagesForUid(uid)?.singleOrNull()
