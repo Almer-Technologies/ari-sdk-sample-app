@@ -127,6 +127,90 @@ class AriToolHandlerTest {
         assertEquals("There's no circle 7. The circles are 1.", failure.message)
     }
 
+    /**
+     * The call the tool exists for: one invocation, one result, whatever the
+     * match count. Two green circles go and the red one stays, and `total` is
+     * what is left rather than what went.
+     */
+    @Test
+    fun `remove_circles_by_color removes every circle of that colour in one call`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val payload = ok(invoke("remove_circles_by_color", """{"color":"green"}"""))
+
+        assertEquals("green", payload.string("color"))
+        assertEquals(2, payload.int("removed"))
+        assertEquals(2, payload.int("total"))
+        assertEquals(listOf(1, 4), CircleState.activeNumbers())
+    }
+
+    /**
+     * No circle of that colour is a successful call that removed nothing, not a
+     * failure: there is nothing for Ari to recover from and nothing to ask the
+     * model to fix. `removed` 0 is the whole signal, which is why the tool's
+     * description tells the model what 0 means.
+     */
+    @Test
+    fun `remove_circles_by_color removes nothing when no circle has that colour`() {
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val payload = ok(invoke("remove_circles_by_color", """{"color":"green"}"""))
+
+        assertEquals("green", payload.string("color"))
+        assertEquals(0, payload.int("removed"))
+        assertEquals(2, payload.int("total"))
+        assertEquals(listOf(1, 2), CircleState.activeNumbers())
+    }
+
+    /**
+     * `grey` and `gray` are two names for one colour in the palette, so the user
+     * saying either has to reach the same circles. Matching on the stored name
+     * instead of the resolved colour would pass every other test here and fail
+     * this one, and on a headset it would look like the tool ignoring a circle
+     * that is plainly grey.
+     */
+    @Test
+    fun `remove_circles_by_color matches the colour, not the name it was added under`() {
+        ok(invoke("add_circle", """{"color":"grey"}"""))
+
+        val payload = ok(invoke("remove_circles_by_color", """{"color":"gray"}"""))
+
+        assertEquals(1, payload.int("removed"))
+        assertEquals(listOf(1), CircleState.activeNumbers())
+    }
+
+    /**
+     * `color` is declared required and has no sensible default — a bulk removal
+     * that guessed a colour would delete circles nobody named — so the strict
+     * accessor is right and the SDK writes the message.
+     */
+    @Test
+    fun `remove_circles_by_color without its required colour names the argument`() {
+        val failure = failure(invoke("remove_circles_by_color", "{}"))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("arg 'color' is missing", failure.message)
+    }
+
+    /**
+     * Same backstop as `set_circle_color`'s, over a second handler. The enum
+     * constrains the model and not the wire, and this tool deletes rather than
+     * recolours, so a colour it cannot resolve must refuse instead of matching
+     * nothing and reporting a clean 0.
+     */
+    @Test
+    fun `remove_circles_by_color refuses a colour outside the declared list`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+
+        val failure = failure(invoke("remove_circles_by_color", """{"color":"cerulean"}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertTrue(failure.message, "cerulean" in failure.message.orEmpty())
+        assertEquals(2, CircleState.count)
+    }
+
     @Test
     fun `set_circle_color with no number recolours every circle`() {
         ok(invoke("add_circle", """{"color":"green"}"""))

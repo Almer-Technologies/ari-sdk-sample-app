@@ -13,11 +13,13 @@ import java.util.concurrent.atomic.AtomicInteger
  * it is removed, and removing it leaves a gap — the remaining circles keep their
  * numbers rather than shifting down.
  *
- * That matters more than it looks. Ari resolves "remove the purple ones" by
- * listing the circles and then issuing one removal per match, often *before* the
- * first result comes back. With positional numbering, every removal after the
- * first would target a number that had already shifted, and the wrong circle
- * would go. Stable numbers make a batch of removals safe by construction.
+ * That matters more than it looks. "Remove the purple ones" is one call to
+ * `remove_circles_by_color` now, but a batch of `remove_circle` calls has not
+ * gone away — the model still issues one per circle when the user names two of
+ * them, and it issues them in parallel, often *before* the first result comes
+ * back. With positional numbering, every removal after the first would target a
+ * number that had already shifted, and the wrong circle would go. Stable
+ * numbers make a batch of removals safe by construction.
  *
  * Process-wide singleton because the tool service and the UI are separate
  * components in the same process. A production app would hold this in a
@@ -35,7 +37,7 @@ object CircleState {
      * Colours Ari may pick.
      *
      * This map is the single source of both halves that used to be kept in step
-     * by hand. [supportedNames] feeds the `values` of BOTH `color` args in
+     * by hand. [supportedNames] feeds the `values` of EVERY `color` arg in
      * `AriToolService`'s declaration, and the same map resolves the name Ari
      * sends back. Adding an entry here therefore reaches the model as soon as
      * the declaration asset is regenerated, and a colour can no longer be
@@ -44,7 +46,10 @@ object CircleState {
      * Iteration order is insertion order, so the generated asset is stable.
      *
      * `grey` and `gray` both map to the same colour on purpose: speech-to-text
-     * will produce either, and the model can only pick from this list.
+     * will produce either, and the model can only pick from this list. That is
+     * also why [removeByColor] matches on the colour a name resolves to rather
+     * than on the name itself — otherwise the two would reach different
+     * circles.
      */
     private val NAMED = mapOf(
         "red" to Color.Red,
@@ -136,6 +141,31 @@ object CircleState {
         if (remaining.size == count) return false
         _circles.value = remaining
         return true
+    }
+
+    /**
+     * Remove every circle of one colour. Remaining circles keep their numbers.
+     *
+     * Circles are matched on the colour a name **resolves to**, not on the name
+     * they were added under. [NAMED] holds two names for one colour — `grey`
+     * and `gray` — so matching on the stored name would leave a circle added as
+     * `grey` untouched by "remove the gray ones", and neither the user nor the
+     * model can hear which of the two the other used.
+     *
+     * Shaped like [setColor]: a count, or `null` for an argument this app cannot
+     * make sense of.
+     *
+     * @param colorName Colour to remove; must be a known name.
+     * @return How many circles were removed, or `null` when [colorName] is not
+     *   one this app knows. Zero means no circle had that colour, which is a
+     *   removal of nothing rather than a failure.
+     */
+    fun removeByColor(colorName: String): Int? {
+        val target = colorOf(colorName) ?: return null
+        val (matched, remaining) = _circles.value.partition { colorOf(it.colorName) == target }
+        if (matched.isEmpty()) return 0
+        _circles.value = remaining
+        return matched.size
     }
 
     /**

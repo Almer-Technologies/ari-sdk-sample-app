@@ -16,7 +16,7 @@ import com.ari_os.ari.sdk.ariTools
  * `color` argument's allowed values come straight from [CircleState]'s palette
  * instead of a copy kept in step by hand.
  *
- * Four of the five tools work that way. `show_circle` is the other kind: it is
+ * Five of the six tools work that way. `show_circle` is the other kind: it is
  * declared with a `uri` and no handler, so Ari opens the link itself and never
  * binds this service. It is here only because a tool is declared in one place
  * whatever runs it — its code is [MainActivity] and the manifest's intent
@@ -66,17 +66,26 @@ class AriToolService : AriToolProviderService() {
         }
 
         /**
-         * The only tool declared with `confirm = true`. The flag is not read
-         * today — Ari confirms every app tool and shows the argument values,
-         * and a provider cannot opt out of that. It is set here because it
-         * records which tool is the destructive one, and a later SDK version
-         * may honour it.
+         * One of the two tools declared with `confirm = true`. The flag is not
+         * read today — Ari confirms every app tool and shows the argument
+         * values, and a provider cannot opt out of that. It is set here because
+         * it records which tools are the destructive ones, and a later SDK
+         * version may honour it.
+         *
+         * The description used to end "it is safe to remove several circles in
+         * one go using the numbers from a single list_circles call", which is
+         * true and was the wrong thing to say: the model took it as licence to
+         * answer "remove all the green circles" with one call per match, and
+         * because Ari confirms every call, the user was asked twice. That is
+         * what `remove_circles_by_color` exists for, so this description now
+         * points at it and claims only the single-circle case.
          */
         tool(
             name = "remove_circle",
-            description = "Removes the circle with this number. Other circles keep their own " +
-                "numbers, so it is safe to remove several circles in one go using the numbers " +
-                "from a single list_circles call.",
+            description = "Removes exactly one circle, the one with this number. For every " +
+                "circle of a colour, call remove_circles_by_color once instead of calling this " +
+                "once per match. Other circles keep their own numbers, so a number from an " +
+                "earlier list_circles is still correct.",
             confirm = true,
         ) {
             int(
@@ -90,6 +99,47 @@ class AriToolService : AriToolProviderService() {
             // value is the model's mistake, and the SDK reports it as
             // invalid_argument so Ari can ask for better arguments.
             handle { args -> removeCircle(args.int("number")) }
+        }
+
+        /**
+         * The plural sibling of `remove_circle`. It exists to cut a count of
+         * confirmations, not to save a round trip.
+         *
+         * Ari asks the user before every app tool call and a provider cannot
+         * opt out, so N calls means N prompts. Observed on a headset: "remove
+         * all the green circles" produced two parallel `remove_circle` calls
+         * and the user had to say yes twice. Modelling the plural intent as one
+         * tool makes it one call and therefore one prompt. `confirm = true`
+         * does not achieve that and is not what fixed it — it is set because
+         * this tool is destructive, the same reason `remove_circle` sets it.
+         *
+         * Both descriptions carry the boundary, because the descriptions are
+         * the only thing the model has to choose between them: this one says
+         * every circle of a colour, `remove_circle` says exactly one by number.
+         * `add_circle` already steers decomposition the same way.
+         *
+         * Removing nothing is a success, not an error. There is no failure to
+         * report — the screen already holds no circle of that colour — so the
+         * result carries `removed` 0 and the description tells the model what
+         * to say about it, since the risk is Ari narrating a removal that never
+         * happened.
+         */
+        tool(
+            name = "remove_circles_by_color",
+            description = "Removes every circle of one colour in a single call. Use it " +
+                "whenever the user asks for all the circles of a colour, instead of calling " +
+                "remove_circle once per match. Reports how many it removed; 0 means there were " +
+                "none of that colour, so say nothing was removed.",
+            confirm = true,
+        ) {
+            enum(
+                "color",
+                values = CircleState.supportedNames(),
+                description = "Every circle of this colour is removed. The circles of other " +
+                    "colours stay.",
+                required = true,
+            )
+            handle { args -> removeCirclesByColor(args.string("color")) }
         }
 
         /**
@@ -125,8 +175,9 @@ class AriToolService : AriToolProviderService() {
         tool(
             name = "list_circles",
             description = "Reports every circle on screen with its permanent number and " +
-                "colour. Numbers can have gaps. Call this first whenever the user refers to a " +
-                "circle by colour or position rather than by number.",
+                "colour. Numbers can have gaps. Call this first when the user names a circle " +
+                "by colour or position rather than by number. Removing every circle of a " +
+                "colour needs no numbers: remove_circles_by_color does it in one call.",
         ) {
             handle { listCircles() }
         }
@@ -190,6 +241,22 @@ class AriToolService : AriToolProviderService() {
         if (!CircleState.remove(number)) return noSuchCircle(number)
         return AriToolResult.ok {
             putInt("removed", number)
+            putInt("total", CircleState.count)
+        }
+    }
+
+    /**
+     * `removed` is a count here, and the circle's number in [removeCircle]'s
+     * result. That reads as a collision and is the established shape:
+     * `set_circle_color` already answers with `changed`, a count of the circles
+     * one call touched. The tool name travels with the result, so the model
+     * reads this one as the plural tool's answer.
+     */
+    private fun removeCirclesByColor(color: String): AriToolResult {
+        val removed = CircleState.removeByColor(color) ?: return unknownColor(color)
+        return AriToolResult.ok {
+            putString("color", color)
+            putInt("removed", removed)
             putInt("total", CircleState.count)
         }
     }

@@ -25,17 +25,41 @@ class AriToolServiceTest {
     private val registry = AriToolService().tools()
 
     @Test
-    fun `the service declares the five circle tools, in order`() {
+    fun `the service declares the six circle tools, in order`() {
         assertEquals(
             listOf(
                 "add_circle",
                 "remove_circle",
+                "remove_circles_by_color",
                 "set_circle_color",
                 "list_circles",
                 "show_circle",
             ),
             registry.declarations.map { tool -> tool.name },
         )
+    }
+
+    /**
+     * The pair the whole bulk-removal change rests on, and the only part of it a
+     * JVM test can reach. Whether the model picks the right one of the two needs
+     * a voice turn on a headset; what a test can hold is that each description
+     * still names the other tool, so neither can be reworded into claiming the
+     * other's case without something going red.
+     *
+     * Deliberately structural rather than phrase-matching: rewording a
+     * description is normal and should not fail a test, dropping the pointer to
+     * the sibling is the regression. The one phrase pinned is the zero case,
+     * because a successful call that removed nothing is the thing Ari will
+     * otherwise narrate as a removal.
+     */
+    @Test
+    fun `each removal tool's description points at the other, and names the zero case`() {
+        val one = registry.declarations.single { tool -> tool.name == "remove_circle" }
+        val many = registry.declarations.single { tool -> tool.name == "remove_circles_by_color" }
+
+        assertTrue(one.description, "remove_circles_by_color" in one.description)
+        assertTrue(many.description, "remove_circle" in many.description)
+        assertTrue(many.description, "0 means" in many.description)
     }
 
     /**
@@ -50,7 +74,13 @@ class AriToolServiceTest {
 
         assertEquals(listOf("show_circle"), deeplinks.map { tool -> tool.name })
         assertEquals(
-            listOf("add_circle", "remove_circle", "set_circle_color", "list_circles"),
+            listOf(
+                "add_circle",
+                "remove_circle",
+                "remove_circles_by_color",
+                "set_circle_color",
+                "list_circles",
+            ),
             invocable.map { tool -> tool.name },
         )
     }
@@ -114,29 +144,31 @@ class AriToolServiceTest {
 
     /**
      * Ari confirms every tool regardless, so this pins intent rather than
-     * behaviour: `confirm` is not read today, and removal is the one tool that
-     * would want it if it were.
+     * behaviour: `confirm` is not read today, and the two removals are the tools
+     * that would want it if it were.
      */
     @Test
-    fun `removal is the only tool that declares confirm`() {
+    fun `the two removal tools are the only ones that declare confirm`() {
         assertEquals(
-            listOf("remove_circle"),
+            listOf("remove_circle", "remove_circles_by_color"),
             registry.declarations.filter { tool -> tool.confirm }.map { tool -> tool.name },
         )
     }
 
     /**
-     * The point of declaring in code: both `color` args take their allowed
-     * values from the palette that resolves them, so the two cannot disagree.
+     * The point of declaring in code: every `color` arg takes its allowed values
+     * from the palette that resolves them, so no two of them can disagree. The
+     * count is asserted rather than inferred — a third tool taking a colour is
+     * exactly the change that could add a hand-written list beside this one.
      */
     @Test
-    fun `both color args offer exactly the palette CircleState resolves`() {
+    fun `every color arg offers exactly the palette CircleState resolves`() {
         val colorArgs = registry.declarations
             .flatMap { tool -> tool.args }
             .filterIsInstance<AriToolArg.EnumArg>()
             .filter { arg -> arg.name == "color" }
 
-        assertEquals(2, colorArgs.size)
+        assertEquals(3, colorArgs.size)
         colorArgs.forEach { arg ->
             assertEquals(CircleState.supportedNames(), arg.values)
             arg.values.forEach { value ->

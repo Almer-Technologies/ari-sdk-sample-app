@@ -1,6 +1,6 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes five capabilities to Ari. Install it, then say:
+A minimal Android app that exposes six capabilities to Ari. Install it, then say:
 
 > "Hey Ari, add a blue circle"
 
@@ -11,21 +11,26 @@ A minimal Android app that exposes five capabilities to Ari. Install it, then sa
 | Tool | Args | Notes |
 |---|---|---|
 | `add_circle` | `color?` | Appends a circle, returns its number. Defaults red. |
-| `remove_circle` | `number` | Declares `confirm = true`. Other circles keep their numbers. |
+| `remove_circle` | `number` | One circle, by number. Declares `confirm = true`. |
+| `remove_circles_by_color` | `color` | **Every circle of a colour, in one call.** One call, so one confirmation. |
 | `set_circle_color` | `color`, `number?` | Omit the number to recolour every circle. |
 | `list_circles` | none | How Ari answers "what's on screen?" — it can't see the display. |
 | `show_circle` | `number` | **A deeplink.** No handler: Ari opens `aridemo://circle/{number}` itself. |
 
 Circle numbers are **permanent**, so they can have gaps. Remove circle 2 of 4
-and the rest stay 1, 3 and 4. That is what makes "remove the purple ones" safe:
-Ari issues one removal per match from a single `list_circles`, often before the
-first result comes back, and no number has shifted under it.
+and the rest stay 1, 3 and 4. That is what makes a batch of removals safe: the
+model issues them in parallel, often before the first result comes back, and no
+number has shifted under any of them.
+
+Permanent numbering is no longer what answers "remove the purple ones", though.
+That is one call to `remove_circles_by_color`, and the reason it is a tool rather
+than a batch is the second lesson below.
 
 Every description in the declaration says the numbers are permanent and can
 have gaps. That is deliberate — without it the model assumes numbers run 1..N
 and guesses wrong after a removal.
 
-## Two lessons worth more than the code
+## Three lessons worth more than the code
 
 **Prefer idempotent tools.** `set_circle_color` is idempotent — setting blue twice
 looks identical to once. `add_circle` is not, so when the language model
@@ -35,9 +40,31 @@ must accumulate or destroy, say so in the description (see `add_circle`).
 Ari confirms every tool call anyway, but the description is what the model
 reads before it decides to make the call at all.
 
+**One tool call, one confirmation — so model the plural intent as a tool.**
+Ari asks the user before every app tool call and a provider cannot opt out, so N
+calls means N prompts. This app learned that on a headset: "remove all the green
+circles" produced two parallel `remove_circle` calls, and the user had to say yes
+twice. The fix is not in the confirmation layer, it is in the tool surface —
+`remove_circles_by_color` makes the plural intent one call, and therefore one
+prompt. Look for the phrasing your users will actually say ("all the", "every",
+"both") and ask whether your tools can answer it in one call.
+
+Both descriptions then have to carry the boundary, because the descriptions are
+all the model has to choose between them. `remove_circle` says "Removes exactly
+one circle, the one with this number", `remove_circles_by_color` says "Removes
+every circle of one colour in a single call ... instead of calling remove_circle
+once per match", and `remove_circle`'s old closing line — that removing several
+circles in one go was safe — is gone, because it read as licence to do exactly
+the thing this replaces.
+
 **Ari narrates before it knows.** The model often says "adding it" before reading
 the tool result, so a failure can be spoken as a success. Return precise error
 text — Ari reads it out — and don't rely on the user hearing the difference.
+The same hazard has a quieter form on a *successful* call: asking
+`remove_circles_by_color` for a colour no circle has removes nothing, which is a
+success and not an error, so the result says `"removed": 0` and the description
+tells the model what 0 means. Without that the natural narration is "removed the
+green ones" when there never were any.
 
 ## How it works
 
@@ -79,7 +106,7 @@ declared with that tool.
 
 One registry answers both questions Ari asks. This is the real thing, cut down
 to one tool — see `app/src/main/java/com/example/aridemo/AriToolService.kt` for
-all four:
+all five:
 
 ```kotlin
 class AriToolService : AriToolProviderService() {
@@ -137,9 +164,13 @@ values instead of letting it invent `"cerulean"`.
 and shows the argument values the call will send, and a provider cannot opt out
 — the declaration comes from your own APK, so nothing in it could win an
 exemption. The `confirm` flag on `tool()` is **not read today**. This app still
-sets it on `remove_circle`, because it documents which tool is the destructive
-one and a later SDK version may honour it. Do not design around it being
-honoured now.
+sets it on both removal tools, because it documents which tools are the
+destructive ones and a later SDK version may honour it. Do not design around it
+being honoured now.
+
+That is also why `remove_circles_by_color` is a tool and not a flag: since every
+call is confirmed and nothing in the declaration can change that, the only way
+to ask the user once instead of twice is to make it one call.
 
 ### A tool that is only a link
 
@@ -197,7 +228,7 @@ they are the ones to weigh for your own app:
   integration should not fabricate one.
 - **The SDK says to prefer a handler when you have a service, and this app has
   one.** `freeTextInUri` is for when the deeplink *is* the whole integration.
-  Four of the five tools here are handled over the binder, so a free-text
+  Five of the six tools here are handled over the binder, so a free-text
   deeplink would be the exact case the SDK's own README argues against.
 - **The marker is worth having because it is rare.** Its point is that one grep
   for `freeTextInUri` finds every free-text deeplink you ship. A sample that
@@ -445,9 +476,12 @@ class AriToolHandlerTest {
 ```
 
 `app/src/test/java/com/example/aridemo/AriToolHandlerTest.kt` is the full set —
-ten tests over all four tools, including the circle limit, the number gap a
-removal leaves, a colour outside the declared `enum`, and an undeclared tool
-name.
+sixteen tests over all five handled tools, including the circle limit, the number
+gap a removal leaves, a colour outside the declared `enum`, an undeclared tool
+name, and both edges of the bulk removal: a colour that matches nothing (a
+success reporting `"removed": 0`) and `gray` reaching a circle added as `grey`,
+because the palette holds two names for one colour and the user cannot hear which
+one anybody used.
 
 Your test module needs three things, and each missing piece fails its own way:
 
