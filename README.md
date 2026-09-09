@@ -587,19 +587,22 @@ Requirements on the device:
 
 - The **Ari app must be installed** — it defines the permission this app's
   service requires. Without it the service is unreachable.
-- This app's package must be on Ari's provider allowlist
-  (`AppToolTrust.PACKAGES` in the Ari app, and `TRUSTED_APP_TOOL_PACKAGES` in
-  the Ari cloud). In the proof-of-concept both are compiled in; production ties
-  provider eligibility to the app marketplace.
 
-Tools are discovered when a session **starts**. If you install this app while
-Ari is already in a conversation, end and restart the conversation.
+There is no provider allowlist, on either side. Any installed app that declares
+tools is discovered when a voice session **starts**, and the only per-tool gate
+is the declared `confirm` flag: it defaults to false, and the cloud honours it
+by asking the user before it runs that tool. Nothing verifies a provider's
+signature in this experimental release.
+
+Because discovery runs when a session starts, installing this app while Ari is
+already in a conversation leaves it invisible. End and restart the
+conversation.
 
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
-| Ari says it can't change colours | Package not on the allowlist, or discovery ran before install. Restart the session. |
+| Ari says it can't change colours | Discovery ran before this app was installed. Restart the session. |
 | `SecurityException` on bind in logcat | The Ari app is missing `<uses-permission>` for its own `BIND_TOOL_PROVIDER`. Defining a permission does not grant it. |
 | `Skipping <pkg>: no ari_tools.json asset` | The declaration is not at `app/src/main/assets/ari_tools.json`, or the filename is misspelt. |
 | `Skipping <pkg>: no declaration version` | `declarationVersion` is missing from the top-level object. The whole file is rejected. |
@@ -676,35 +679,53 @@ implementation("com.ari_os.ari:ari-tool-sdk:<version>")
 The protocol module arrives with it, because the SDK exposes it with `api`
 scope.
 
-## Not verified on hardware
+## Verified on hardware
 
-Nothing in this sample has been run on a headset or an emulator. What is
-verified, on a JVM, is that it builds; that the declaration ships inside the
-APK; that the declaration satisfies the real constants in `AriToolsContract`
-(`AriToolsDeclarationContractTest`); and that every tool returns what it should
-when its handler is invoked through the binder (`AriToolHandlerTest`).
+Verified on 2026-09-09 on a RealWear Arc 3 (model A31G, Android 13, firmware
+`1.0.5-38-C.ARC3.G`) running Ari 2.5.4296 and the account app 1.2.4296, against
+the SDK cloud deployment.
 
-What is **not** exercised is everything that needs a device: Ari discovering the
-provider, reading the asset out of the installed APK, binding the service, and
-the `BIND_TOOL_PROVIDER` permission actually turning another app away. The
-vendored SDK now carries an instrumented test of its own
-(`AriToolDeclarationInstrumentedTest`, for the ICU regex engine); that has not
-been run here either — it is compiled and packaged, never executed.
+Discovery found this app and took all of it: **1 provider, 6 tools registered,
+0 dropped**. The provider survived a reinstall of this app, a force-stop of
+Ari, and disabling and re-enabling the app.
+
+Every tool ran by voice:
+
+| Tool | What happened |
+|---|---|
+| `add_circle` | Ran with no confirmation. |
+| `list_circles` | Reported the circles on screen. |
+| `set_circle_color` | Recoloured the circle it was given. |
+| `remove_circle` | Asked once, then removed the circle. |
+| `remove_circles_by_color` | Removed 2 circles, and on a later run 3, each time in **one call with one confirmation**. |
+| `show_circle` | Fired by Ari itself as a deeplink. Ari opened `aridemo://circle/3` with no service bind at all, and the app came to the front. |
+
+The provider process was killed and then re-bound with its state intact. Losing
+the backend, and losing the tunnel, were both survivable.
+
+Still **not** exercised on hardware:
+
+- `cancel()` and `setAvailable`.
+- Launch results (the `PendingIntent`) and the spoken line that goes with one.
+- `callingPackage` checks.
+- The oversize caps on results and on arguments.
+- Declaration version skew.
+- Saying no at a confirmation.
+- An invalid enum value.
+- The seventh-circle limit.
+- `show_circle` by voice for a circle that does not exist.
+- Android 16 background-launch rules.
+- `PendingIntent` immutability on API 30.
+- The vendored SDK's own instrumented test
+  (`AriToolDeclarationInstrumentedTest`, for the ICU regex engine). It is
+  compiled and packaged, and was not run in this pass.
+
+The JVM checks still stand underneath all of that: the app builds, the
+declaration ships inside the APK, it satisfies the real constants in
+`AriToolsContract` (`AriToolsDeclarationContractTest`), and every tool returns
+what it should when its handler is invoked through the binder
+(`AriToolHandlerTest`).
 
 The handler tests reach the service through the same binder Ari calls, but they
-call it in-process — no real Binder transaction crosses, which is exactly why the
-permission gate reads as a no-op there.
-
-**The deeplink is the least proven part of this sample, not the most.**
-`show_circle` is verified only as far as static checks reach: the tool ships in
-the APK's asset with its `uri`; the declaration passes `AriToolsContract`'s real
-checks; the `<intent-filter>` is in the packaged manifest with the scheme and
-host the template uses, checked against `CircleDeeplink`'s constants at build
-time; and the service refuses to run the tool if Ari invokes it instead of
-opening the link. What none of that shows is the thing that matters — Ari
-substituting the number, firing `ACTION_VIEW`, **Android resolving the filter**,
-and `MainActivity` coming to the front with the circle ringed. Intent resolution
-happens in `PackageManager` against installed packages, so it cannot be run on a
-JVM at all. A matching filter on disk is necessary for that and not sufficient
-for it. Until someone runs this on a headset, "the deeplink works" is a
-reasonable expectation and not a result.
+call it in-process. No real Binder transaction crosses, which is exactly why
+the permission gate reads as a no-op there.
