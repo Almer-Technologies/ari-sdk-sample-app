@@ -33,6 +33,14 @@ import com.ari_os.ari.sdk.ariTools
  * reader who cannot see the screen: it says what the tool does and what the
  * argument means, because the model picks the tool from that text alone.
  *
+ * `confirm` is read by the cloud and defaults to `false`, so every tool here is
+ * making a choice about whether the user is asked first. The two removals
+ * declare `true`; the other four run with no prompt. Each declaration says why
+ * in its own doc comment, including the ones that leave the flag off, because a
+ * flag left off looks the same whether it was decided or overlooked. Nothing
+ * verifies who declared it, so the flag protects the user only because this app
+ * is honest about which tools destroy something.
+ *
  * This class is the entire integration surface — everything else is ordinary
  * app code.
  */
@@ -49,6 +57,16 @@ class AriToolService : AriToolProviderService() {
          * the user never asked for — and small models do sometimes regenerate a
          * turn and re-issue their tool call. The description is the cheapest
          * lever on that.
+         *
+         * No `confirm`, so no prompt — and that is a decision, not a default
+         * left where it fell. The cloud reads the flag, so `false` is now an
+         * answer this app is giving: adding a circle is harmless and one
+         * `remove_circle` undoes it, so making the user say yes first would buy
+         * nothing and train them to wave prompts through. Note that the prompt
+         * would not fix the repeat-call risk either — a regenerated turn asks
+         * again, and the user, having just asked for a circle, says yes again.
+         * That risk is the description's job, which is the point of the
+         * paragraph above.
          */
         tool(
             name = "add_circle",
@@ -66,19 +84,25 @@ class AriToolService : AriToolProviderService() {
         }
 
         /**
-         * One of the two tools declared with `confirm = true`. The flag is not
-         * read today — Ari confirms every app tool and shows the argument
-         * values, and a provider cannot opt out of that. It is set here because
-         * it records which tools are the destructive ones, and a later SDK
-         * version may honour it.
+         * One of the two tools declared with `confirm = true`, and the flag is
+         * read: the cloud asks the user before it runs this tool and shows the
+         * argument values the call will send. `false` or absent means no
+         * prompt, and `false` is the default — so a destructive tool that says
+         * nothing about it runs silently. This one is destructive and says so.
+         *
+         * Nothing verifies who declared the flag. The declaration ships in this
+         * app's own APK, so it protects the user only because this app sets it
+         * honestly; it is a promise a provider makes, not a check Ari performs.
+         * A partner shipping something that deletes real data should read that
+         * as the reason to set it, not as a reason it does not matter.
          *
          * The description used to end "it is safe to remove several circles in
          * one go using the numbers from a single list_circles call", which is
          * true and was the wrong thing to say: the model took it as licence to
          * answer "remove all the green circles" with one call per match, and
-         * because Ari confirms every call, the user was asked twice. That is
-         * what `remove_circles_by_color` exists for, so this description now
-         * points at it and claims only the single-circle case.
+         * because this tool prompts, the user was asked twice. That is what
+         * `remove_circles_by_color` exists for, so this description now points
+         * at it and claims only the single-circle case.
          */
         tool(
             name = "remove_circle",
@@ -105,13 +129,19 @@ class AriToolService : AriToolProviderService() {
          * The plural sibling of `remove_circle`. It exists to cut a count of
          * confirmations, not to save a round trip.
          *
-         * Ari asks the user before every app tool call and a provider cannot
-         * opt out, so N calls means N prompts. Observed on a headset: "remove
-         * all the green circles" produced two parallel `remove_circle` calls
-         * and the user had to say yes twice. Modelling the plural intent as one
-         * tool makes it one call and therefore one prompt. `confirm = true`
-         * does not achieve that and is not what fixed it — it is set because
-         * this tool is destructive, the same reason `remove_circle` sets it.
+         * Both removal tools declare `confirm = true`, so Ari prompts before
+         * each of their calls, and N calls means N prompts. Observed on a
+         * headset: "remove all the green circles" produced two parallel
+         * `remove_circle` calls and the user had to say yes twice. Modelling
+         * the plural intent as one tool makes it one call and therefore one
+         * prompt.
+         *
+         * Clearing `confirm` would also have silenced the second prompt, now
+         * that the cloud reads the flag, and would have been the wrong fix: the
+         * prompt is what a destructive tool owes the user, and dropping it to
+         * cut a count trades the user's safety for the model's tidiness. How
+         * many times the user is asked is a property of the tool surface, so
+         * that is where it was fixed.
          *
          * Both descriptions carry the boundary, because the descriptions are
          * the only thing the model has to choose between them: this one says
@@ -146,6 +176,22 @@ class AriToolService : AriToolProviderService() {
          * `number` is declared optional on purpose: omitted means every circle.
          * That keeps the simple phrasing ("change the colour to blue") working
          * when there is only one.
+         *
+         * No `confirm`, so no prompt, and this is the closest call in the
+         * registry — worth writing down rather than defaulting. Omitting
+         * `number` recolours everything, and no circle's previous colour is
+         * recorded anywhere, so that call cannot be undone from anything the
+         * model knows. By the SDK's own rule — set it on anything destructive
+         * or hard to undo — that is an argument for `true`.
+         *
+         * It stays `false` because in this app the thing lost is a circle's
+         * colour, which is the sample's toy subject and costs nothing to set
+         * again, and because this tool is the README's example of an idempotent
+         * one: a prompt here would blur the lesson that idempotent tools are the
+         * safe kind. A partner should not copy the answer, though — copy the
+         * question. An optional argument whose absence widens what one call
+         * reaches is exactly the shape to set `confirm = true` on once the
+         * thing being overwritten is real.
          */
         tool(
             name = "set_circle_color",
@@ -171,6 +217,11 @@ class AriToolService : AriToolProviderService() {
          * Declared with no arguments. Ari cannot see the screen, so this is how
          * it answers questions about what is displayed, and how it maps a
          * colour back to a number before removing or recolouring.
+         *
+         * No `confirm`, and this is the easy one: the tool reads and changes
+         * nothing. It is also the tool the model calls first to resolve a
+         * colour into numbers, so a prompt here would put a question in front
+         * of the user before the request they made had even been understood.
          */
         tool(
             name = "list_circles",
@@ -202,6 +253,13 @@ class AriToolService : AriToolProviderService() {
          * The template is [CircleDeeplink.TEMPLATE], so what Ari is told to open
          * and what the app parses are one constant rather than two strings that
          * agree today.
+         *
+         * `deeplink()` takes `confirm` too, and this one leaves it off: opening
+         * a screen that highlights a circle changes nothing and is undone by
+         * looking away. A deeplink that committed something — a payment, a
+         * message sent — would want `true`, and would want it more than a bound
+         * tool does, because once Ari opens the link this app's own screen is
+         * the only thing left between the model and the action.
          */
         deeplink(
             name = "show_circle",

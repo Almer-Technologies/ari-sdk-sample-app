@@ -143,9 +143,13 @@ class AriToolServiceTest {
     }
 
     /**
-     * Ari confirms every tool regardless, so this pins intent rather than
-     * behaviour: `confirm` is not read today, and the two removals are the tools
-     * that would want it if it were.
+     * The cloud reads `confirm`, so this pins behaviour the user feels: these
+     * two tools prompt and the other four do not. Both halves matter. A flag
+     * added to a harmless tool trains the user to wave prompts through, and a
+     * flag dropped from a removal takes the prompt away silently — `false` is
+     * the default, so that particular regression looks like nothing at all in a
+     * diff. Asserting the whole set, rather than that each removal has it, is
+     * what catches the second one.
      */
     @Test
     fun `the two removal tools are the only ones that declare confirm`() {

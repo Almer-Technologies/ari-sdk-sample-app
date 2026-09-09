@@ -8,14 +8,19 @@ A minimal Android app that exposes six capabilities to Ari. Install it, then say
 
 ## The tools
 
-| Tool | Args | Notes |
-|---|---|---|
-| `add_circle` | `color?` | Appends a circle, returns its number. Defaults red. |
-| `remove_circle` | `number` | One circle, by number. Declares `confirm = true`. |
-| `remove_circles_by_color` | `color` | **Every circle of a colour, in one call.** One call, so one confirmation. |
-| `set_circle_color` | `color`, `number?` | Omit the number to recolour every circle. |
-| `list_circles` | none | How Ari answers "what's on screen?" — it can't see the display. |
-| `show_circle` | `number` | **A deeplink.** No handler: Ari opens `aridemo://circle/{number}` itself. |
+| Tool | Args | Prompts? | Notes |
+|---|---|---|---|
+| `add_circle` | `color?` | no | Appends a circle, returns its number. Defaults red. |
+| `remove_circle` | `number` | **yes** | One circle, by number. |
+| `remove_circles_by_color` | `color` | **yes** | **Every circle of a colour, in one call.** One call, so one prompt. |
+| `set_circle_color` | `color`, `number?` | no | Omit the number to recolour every circle. |
+| `list_circles` | none | no | How Ari answers "what's on screen?" — it can't see the display. |
+| `show_circle` | `number` | no | **A deeplink.** No handler: Ari opens `aridemo://circle/{number}` itself. |
+
+"Prompts?" is the `confirm` flag, which the cloud reads: the two removals declare
+`confirm = true` and Ari asks the user before running them. The other four
+declare nothing and run silently. Each is a decision, and each declaration says
+why — see "Declaring tools" below.
 
 Circle numbers are **permanent**, so they can have gaps. Remove circle 2 of 4
 and the rest stay 1, 3 and 4. That is what makes a batch of removals safe: the
@@ -37,17 +42,24 @@ looks identical to once. `add_circle` is not, so when the language model
 occasionally regenerates a turn and repeats its tool call, you get a circle you
 never asked for. Same model flakiness, wildly different consequence. Where a tool
 must accumulate or destroy, say so in the description (see `add_circle`).
-Ari confirms every tool call anyway, but the description is what the model
-reads before it decides to make the call at all.
+`add_circle` declares no `confirm`, so nothing asks the user first — the
+description is the only thing standing between a regenerated turn and a second
+circle. Setting `confirm` would not change that: a user who has just asked for a
+circle says yes to being asked again.
 
 **One tool call, one confirmation — so model the plural intent as a tool.**
-Ari asks the user before every app tool call and a provider cannot opt out, so N
-calls means N prompts. This app learned that on a headset: "remove all the green
-circles" produced two parallel `remove_circle` calls, and the user had to say yes
-twice. The fix is not in the confirmation layer, it is in the tool surface —
-`remove_circles_by_color` makes the plural intent one call, and therefore one
-prompt. Look for the phrasing your users will actually say ("all the", "every",
-"both") and ask whether your tools can answer it in one call.
+Both removal tools declare `confirm = true`, so Ari prompts before each of their
+calls, and N calls means N prompts. This app learned that on a headset: "remove
+all the green circles" produced two parallel `remove_circle` calls, and the user
+had to say yes twice. The fix is not in the confirmation layer, it is in the tool
+surface — `remove_circles_by_color` makes the plural intent one call, and
+therefore one prompt. Look for the phrasing your users will actually say ("all
+the", "every", "both") and ask whether your tools can answer it in one call.
+
+Dropping `confirm` would have silenced the second prompt too, and would have been
+the wrong fix. The prompt is what a destructive tool owes the user; the number of
+times the user is asked is a property of the tool surface, so that is where it
+belongs.
 
 Both descriptions then have to carry the boundary, because the descriptions are
 all the model has to choose between them. `remove_circle` says "Removes exactly
@@ -160,17 +172,28 @@ only `enum` takes `values`, so a value list on any other type cannot be written.
 Prefer `enum` where the value space is closed: it constrains the model to real
 values instead of letting it invent `"cerulean"`.
 
-**Ari confirms every app tool.** It asks the user before it runs any of them
-and shows the argument values the call will send, and a provider cannot opt out
-— the declaration comes from your own APK, so nothing in it could win an
-exemption. The `confirm` flag on `tool()` is **not read today**. This app still
-sets it on both removal tools, because it documents which tools are the
-destructive ones and a later SDK version may honour it. Do not design around it
-being honoured now.
+**`confirm` decides whether the user is asked.** The cloud reads the flag on
+`tool()` and on `deeplink()`. `true` means Ari asks the user before it runs the
+tool and shows the argument values the call will send; `false` or absent means it
+runs with no prompt. The default is `false`, so **a destructive tool that says
+nothing gets no prompt.** Set it on anything destructive or hard to undo.
 
-That is also why `remove_circles_by_color` is a tool and not a flag: since every
-call is confirmed and nothing in the declaration can change that, the only way
-to ask the user once instead of twice is to make it one call.
+**Nothing verifies who declared it.** The declaration ships in your own APK, so
+the flag protects the user only if you set it honestly. A provider that leaves
+`false` on a tool that deletes data gets no prompt and the user sees no warning.
+Treat it as a promise you are making, not a check Ari performs on your behalf.
+
+Because the default is `false`, a flag left off looks identical whether it was
+decided or overlooked. This app therefore says why in a comment beside every
+declaration, including the four that leave it off, and pins the whole set in a
+test (`the two removal tools are the only ones that declare confirm`) — dropping
+`confirm` from a removal is otherwise a regression that shows up as nothing at
+all in a diff.
+
+That is also why `remove_circles_by_color` is a tool and not a flag: both
+removals prompt, so the only way to ask the user once instead of twice is to make
+it one call. Turning the flag off would have been the other way to silence the
+second prompt, and the wrong one.
 
 ### A tool that is only a link
 
