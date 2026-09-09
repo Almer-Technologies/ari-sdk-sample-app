@@ -115,7 +115,8 @@ class AriToolsBuilder internal constructor() {
     /**
      * A tool Ari runs by binding your service.
      *
-     * @param confirm Not read yet. Ari asks the user before it runs any tool.
+     * @param confirm Whether Ari asks the user before it runs this tool. Set it on anything
+     *   destructive. Nothing checks who declared it, so it guards the user only if you are honest.
      * @param presentsUi Whether the tool opens a screen and returns no data.
      */
     fun tool(
@@ -144,6 +145,8 @@ class AriToolsBuilder internal constructor() {
      * A tool that is only a deeplink. Ari opens [uri] itself and never binds your service.
      *
      * @param uri Deeplink template, with one `{arg_name}` placeholder per value Ari fills.
+     * @param confirm Whether Ari asks the user before it opens the link. Set it on anything
+     *   destructive. Nothing checks who declared it, so it guards the user only if you are honest.
      */
     fun deeplink(
         name: String,

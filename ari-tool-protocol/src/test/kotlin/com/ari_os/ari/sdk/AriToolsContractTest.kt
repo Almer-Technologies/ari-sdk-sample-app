@@ -15,6 +15,7 @@ class AriToolsContractTest {
             AriToolsContract.PERMISSION_BIND_TOOL_PROVIDER
         )
         assertEquals("ari_tools.json", AriToolsContract.DECLARATION_ASSET)
+        assertEquals("com.ari_os.ari.tools", AriToolsContract.META_DATA_TOOL_PROVIDER)
         assertEquals(2, AriToolsContract.DECLARATION_VERSION)
         assertEquals("declarationVersion", AriToolsContract.FIELD_DECLARATION_VERSION)
     }

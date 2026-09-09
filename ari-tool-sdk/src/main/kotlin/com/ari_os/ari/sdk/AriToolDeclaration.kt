@@ -106,6 +106,8 @@ private fun requireUriTemplate(
 /**
  * One tool a provider app exposes to Ari.
  *
+ * @property confirm Whether Ari asks the user before it runs the tool. A partner writes its
+ *   own declaration, so this guards the user only if the partner sets it honestly.
  * @property presentsUi Whether the tool opens a screen and returns no data.
  * @property uri Deeplink template Ari opens instead of binding the provider, with one
  *   `{arg_name}` placeholder per value to fill. Ari opens it as `ACTION_VIEW` on the

@@ -12,6 +12,12 @@ object AriToolsContract {
     /** Asset holding the provider's tool declaration, decoded by `AriToolDeclarationFile`. */
     const val DECLARATION_ASSET = "ari_tools.json"
 
+    /**
+     * `<application>` meta-data name a provider sets to `true`, so Ari finds it with no service.
+     * Same text as [AUTHORITY_TOOLS], and a different thing: that one is Ari's own provider.
+     */
+    const val META_DATA_TOOL_PROVIDER = "com.ari_os.ari.tools"
+
     /** Authority of the Ari provider a partner pushes its available tools to. */
     const val AUTHORITY_TOOLS = "com.ari_os.ari.tools"
 

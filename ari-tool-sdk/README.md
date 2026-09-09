@@ -83,11 +83,14 @@ The rules the registry enforces:
   one provider claims. The registry rejects a ninth tool, so you see it in your
   own build, not in Ari's log.
 
-**Every app tool is confirmed.** Ari asks the user before it runs any tool, and
-shows the argument values the call will send. You cannot opt out. The `confirm`
-flag on either builder is not read. Your declaration comes from your own APK, so
-nothing in it can win an exemption. Set the flag if it documents your intent — a
-later version may honour it.
+**`confirm` decides whether Ari asks the user.** The cloud reads the flag on
+both builders. It defaults to `false`, and `false` means the tool runs with no
+prompt. Set `true` on anything destructive or hard to undo.
+
+Nothing checks who the declaring app is. Your declaration comes from your own
+APK, so the flag protects the user only if you set it honestly. A provider that
+leaves `false` on a destructive tool gets no prompt, and the user sees no
+warning.
 
 #### The argument builders
 
@@ -188,6 +191,9 @@ text, validates it, and opens your screen with `AriToolResult.launch(...)`. Use
 
 `presentsUi` is set for you, because a deeplink tool returns no data.
 
+An app whose tools are all deeplinks ships no service, so Ari finds it only by
+the `<application>` meta-data flag. See "Publish the service".
+
 ### 2. Write the asset, and let a test keep it honest
 
 Ari reads `assets/ari_tools.json` straight from your installed APK, before it
@@ -279,6 +285,8 @@ same text if you want to write it another way.
 - `freeTextUriArgs` names the `string` args of one tool that may fill a
   `{placeholder}`. `freeTextInUri` writes it. A tool that names none omits the
   key, and an omitted key opts nothing in.
+- `confirm` says whether Ari asks the user before it runs that tool. It
+  defaults to `false`, so a tool that wants no prompt omits the key.
 - A key with its default value is left out, so the file stays short.
 
 The file carries no package id. Ari takes it from your installed APK, so a
@@ -319,7 +327,22 @@ The SDK enforces the same permission on every AIDL call, so a missing
 an error at bind time instead. Keep the attribute anyway: it makes Android
 reject the bind before your process even starts.
 
-A provider whose tools are all deeplinks needs no service at all.
+A provider whose tools are all deeplinks needs no service at all. It needs one
+`<application>` meta-data flag instead, so Ari can find it:
+
+```xml
+<application ...>
+    <meta-data android:name="com.ari_os.ari.tools" android:value="true"/>
+</application>
+```
+
+The name is `AriToolsContract.META_DATA_TOOL_PROVIDER`. It reads the same as
+Ari's tools authority and means something else, so copy it exactly.
+
+Ari finds a provider two ways: the service `intent-filter` above, or this flag.
+A provider that ships a service needs no flag. **Without a service and without
+the flag your app is invisible to Ari.** It is never a candidate, so no tool
+reaches the LLM and nothing is logged.
 
 ### 4. Write the handlers
 
