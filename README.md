@@ -10,9 +10,9 @@ Build it, install it, and say:
 
 **The app does not need to be open** — Ari reads its capabilities without launching it.
 
-This repo is the worked example. [ari-tool-sdk/README.md](ari-tool-sdk/README.md)
-is the reference for the SDK itself; where this file explains something the SDK
-already documents, it points there instead of repeating it.
+This repo is the worked example, not the SDK reference. The SDK ships as a
+binary (`sdk-repo/`), so its own documentation is not in here; this file covers
+what an integrating app has to do.
 
 ## The tools
 
@@ -124,24 +124,25 @@ the activity is `launchMode="singleTask"`.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The build needs JDK 21 and an Android SDK — either an `sdk.dir` in
-`local.properties` or `ANDROID_HOME` in the environment. No module declares a
+The build needs JDK 21 and an Android SDK with **API 36** — either an `sdk.dir`
+in `local.properties` or `ANDROID_HOME` in the environment. No module declares a
 Gradle toolchain, so the JDK Gradle itself runs on is the one that compiles the
-code. To run every check:
+code. Nothing else is fetched for the SDK: it resolves out of `sdk-repo/` in
+this directory. To run every check:
 
 ```bash
-./gradlew :ari-tool-sdk:testDebugUnitTest :app:testDebugUnitTest
+./gradlew :app:testDebugUnitTest
 ```
 
-`scripts/package-release.sh` rebuilds the two archives into `build/dist/`,
-taking the version from `versionName` in `app/build.gradle.kts` and the file
-list from git.
+`scripts/package-release.sh` rebuilds the archive into `build/dist/`, taking the
+version from `versionName` in `app/build.gradle.kts` and the file list from git.
 
-`.github/workflows/build.yml` runs those plus `:app:assembleDebug` on
+`.github/workflows/build.yml` runs that build and those tests on
 `ubuntu-latest`, then reads `assets/ari_tools.json` back out of the built APK and
 diffs it against the committed source. It cannot detect an upstream SDK change
-breaking a partner: the SDK here is a vendored copy, so a green run proves *this
-copy* compiles and its tests pass.
+breaking a partner: nothing here rebuilds the SDK, so a green run proves the
+sample works against *the AAR that is committed* — the exact artifact you get —
+and says nothing about the SDK's current source.
 
 On the device, the **Ari app must be installed** — it defines the permission
 this app's service requires. Discovery runs when a voice session **starts**, so
@@ -150,35 +151,38 @@ conversation.
 
 ## Pointing your own project at the SDK
 
-Copy `ari-tool-sdk/` into your project, add it to `settings.gradle.kts`, and
-depend on it:
+Copy `sdk-repo/` into your project, add it as a repository, and declare the
+dependency. Two edits, no modules and no `include` lines:
 
 ```kotlin
-// settings.gradle.kts
-include(":ari-tool-sdk")
+// settings.gradle.kts, inside dependencyResolutionManagement { repositories { … } }
+maven { url = uri(settingsDir.resolve("sdk-repo")) }
 
 // app/build.gradle.kts
-dependencies {
-    implementation(project(":ari-tool-sdk"))
-}
+implementation("com.ari_os:ari-tool-sdk:0.1.0")
 ```
 
-Two build settings the SDK needs that a fresh module does not have:
-`testOptions { unitTests.isReturnDefaultValues = true }`, or the stubbed
-`android.jar` throws instead of returning defaults, and
-`testImplementation("org.json:json:...")`, or a result comes back empty. Both are
-in `app/build.gradle.kts` here, with comments.
+**Do not list the SDK's own dependencies.** `sdk-repo/` is a Maven repository,
+not a folder of loose files, and the POM beside the AAR declares all four —
+`kotlin-stdlib`, `kotlinx-serialization-json`, `kotlinx-coroutines-core` and
+`kotlinx-coroutines-android` — so Gradle brings them in for you. That is why it
+is a `maven { }` entry and not `flatDir`: a bare AAR carries no metadata, so a
+`flatDir` project compiles and then dies at runtime with `NoClassDefFoundError`
+on the first tool call.
 
-`ari-tool-sdk/` is a **copy** of leviathan's `libs/ari-tool-sdk`, kept in this
-repo only because there is nowhere to publish it to yet. Everything under `src/`
-is byte-for-byte upstream, including upstream's own unit tests, which run here.
-**Do not edit the copy** — change the real module in leviathan and re-copy.
-`ari-tool-sdk/VENDORED_FROM.txt` records the commit and how to refresh. Once the
-RealWear Maven repository exists, the swap is one dependency:
+Your app must compile against **API 36 or newer** (`compileSdk = 36`); the AAR
+records that floor and AGP enforces it. Your `minSdk` and `targetSdk` are
+unaffected — the SDK's own `minSdk` is 30.
 
-```kotlin
-implementation("com.ari_os:ari-tool-sdk:<version>")
-```
+Two more settings, needed only if you unit-test your `AriToolProviderService`
+subclass on the JVM: `testOptions { unitTests.isReturnDefaultValues = true }`,
+or the stubbed `android.jar` throws instead of returning defaults, and
+`testImplementation("org.json:json:...")`, or a result comes back empty. Both
+are in `app/build.gradle.kts` here, with comments.
+
+`sdk-repo/BUILT_FROM.txt` records which commit the AAR was built from and how a
+new one is produced. When the RealWear Maven repository exists, `sdk-repo/`
+becomes its URL and nothing else about the two edits above changes.
 
 ## Troubleshooting
 
@@ -209,9 +213,12 @@ service bind at all.
 Still **not** exercised on hardware: `cancel()` and `setAvailable`, launch
 results, the oversize caps on results and arguments, declaration version skew,
 saying no at a confirmation, an invalid enum value, the seventh-circle limit,
-Android 16 background-launch rules, `PendingIntent` immutability on API 30, and
-the vendored SDK's own instrumented test (`AriToolDeclarationInstrumentedTest`,
-for the ICU regex engine — it is compiled and packaged, never run). The
-permission gate and `PendingIntent.isImmutable` cannot be covered by any JVM
+Android 16 background-launch rules, and `PendingIntent` immutability on API 30.
+The permission gate and `PendingIntent.isImmutable` cannot be covered by any JVM
 test here: the stubbed `android.jar` makes the first a no-op and cannot report
 the second.
+
+One more caveat on that run: it predates this repo consuming the SDK as an AAR.
+It used a module compiled from the same leviathan commit `sdk-repo/` was built
+from, so the SDK sources match, but the binary a partner now installs was not
+itself the one on the headset, and `compileSdk` has moved 35 -> 36 since.
