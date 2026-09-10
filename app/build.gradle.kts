@@ -8,7 +8,12 @@ plugins {
 
 android {
     namespace = "com.example.aridemo"
-    compileSdk = 35
+
+    // 36 because the SDK AAR requires it: leviathan builds the library against
+    // 36, so its aar-metadata carries minCompileSdk=36 and AGP fails the build
+    // of any consumer compiled lower. targetSdk stays where it is — that is a
+    // separate opt-in into new runtime behaviour, and this change is not it.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.aridemo"
@@ -24,7 +29,8 @@ android {
 
     // AriToolsAssetTest builds AriToolService to read its registry. No handler
     // runs, so no Android context is needed — but the stubbed android.jar must
-    // return defaults rather than throw. Documented in the SDK's README.
+    // return defaults rather than throw. Any project that unit-tests a subclass
+    // of AriToolProviderService needs this; the SDK cannot set it for you.
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
@@ -73,7 +79,10 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    implementation(project(":ari-tool-sdk"))
+    // Resolved from sdk-repo/, the Maven repository committed in this repo.
+    // The SDK's own dependencies — kotlin-stdlib, kotlinx-serialization-json and
+    // the two coroutines artifacts — come from its POM, so nothing here lists them.
+    implementation("com.ari_os:ari-tool-sdk:0.1.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation(platform("androidx.compose:compose-bom:2025.08.00"))
@@ -84,13 +93,14 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 
     // The android unit-test jar stubs org.json and returns defaults, so reading
-    // the generated asset back needs the real implementation. Same reason the
-    // SDK module declares it. On a device org.json ships in the framework, so
-    // neither this nor the SDK adds it to the APK.
+    // the generated asset back needs the real implementation. On a device
+    // org.json ships in the framework, so it is a test dependency only and
+    // never reaches the APK.
     testImplementation("org.json:json:20250517")
 
     // AriToolHandlerTest drives real tool calls, and every handler runs on the
     // main dispatcher. A JVM test has to supply one, so it needs setMain and a
-    // test dispatcher. Version pinned to the SDK's own coroutines version.
+    // test dispatcher. Version matched to the coroutines version the SDK's POM
+    // brings in, so the test dispatcher and the runtime agree.
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
 }

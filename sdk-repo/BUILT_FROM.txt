@@ -1,0 +1,19 @@
+com.ari_os:ari-tool-sdk:0.1.0 was built from leviathan commit
+
+    417ade70511bdad672d88dc35160831f66324347   (branch MOBILE-2340-ari-tool-sdk)
+
+by that repo's :libs:ari-tool-sdk:publishToMavenLocal, run on JDK 21.
+
+The SDK ships as a binary. No SDK source belongs in this repo, so the
+sources jar publishToMavenLocal also writes is deliberately NOT copied
+here — do not add it. LICENSE beside this file governs the .aar; the
+POM names the same licence.
+
+To refresh, from a leviathan checkout at the commit you want:
+
+    ./gradlew :libs:ari-tool-sdk:publishToMavenLocal
+
+then copy the .aar, the .pom and the .module (those three, nothing else)
+from ~/.m2/repository/com/ari_os/ari-tool-sdk/<version>/ into the matching
+directory here, and update the commit above. Bumping the version means a
+new directory plus the version in app/build.gradle.kts.
