@@ -1,6 +1,13 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes six capabilities to Ari. Install it, then say:
+A minimal Android app that exposes six capabilities to Ari. **It ships as two
+archives — `ari-tool-sample-<version>.zip` and `ari-tool-sdk-<version>.zip` —
+and it does not build until you have unpacked both.** Unpack the sample into an
+empty directory, then unpack the SDK archive inside it, next to `app/`. The SDK
+is the larger half by far, and separating it is what keeps the code you actually
+read down to a few hundred lines.
+
+Then install it, and say:
 
 > "Hey Ari, add a blue circle"
 
@@ -128,6 +135,10 @@ code. To run every check:
 ```bash
 ./gradlew :ari-tool-sdk:testDebugUnitTest :app:testDebugUnitTest
 ```
+
+`scripts/package-release.sh` rebuilds the two archives into `build/dist/`,
+taking the version from `versionName` in `app/build.gradle.kts` and the file
+list from git.
 
 `.github/workflows/build.yml` runs those plus `:app:assembleDebug` on
 `ubuntu-latest`, then reads `assets/ari_tools.json` back out of the built APK and
