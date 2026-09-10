@@ -29,6 +29,11 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildFeatures {
+        // Off by default under AGP 8+. This module holds the AIDL wire surface.
+        aidl = true
+    }
+
     // leviathan's convention plugin registers src/main/kotlin; plain AGP does not.
     sourceSets["main"].kotlin.srcDir("src/main/kotlin")
     sourceSets["androidTest"].kotlin.srcDir("src/androidTest/kotlin")
@@ -44,10 +49,6 @@ android {
 // Third-party apps compile against this module, so no internal leviathan
 // module may become a dependency.
 dependencies {
-    // `api`: the AIDL interfaces and AriToolsContract are part of this module's
-    // own signatures, so a partner gets the wire contract with the SDK.
-    api(project(":ari-tool-protocol"))
-
     // The declaration models are @Serializable, and AriToolsAsset encodes them.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 

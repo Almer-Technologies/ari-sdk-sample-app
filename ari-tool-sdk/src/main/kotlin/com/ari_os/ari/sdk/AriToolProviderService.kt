@@ -5,7 +5,6 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Binder
 import android.os.IBinder
 import android.os.RemoteException
 import android.util.Log
@@ -64,13 +63,10 @@ abstract class AriToolProviderService : Service() {
                 send(callback, requestId, Delivery(ARGS_TOO_LARGE.toJson()))
                 return
             }
-            // Read the caller before any dispatch. Binder.getCallingUid() names
-            // the caller only on the binder thread, and reports this process's
-            // own uid everywhere else.
-            val call = AriToolCall(callingPackage(), requestId)
             when (val found = findTool(toolName)) {
                 is Lookup.Refused -> send(callback, requestId, Delivery(found.result.toJson()))
-                is Lookup.Found -> start(call, toolName, found.handler, argsJson, callback)
+                is Lookup.Found ->
+                    start(AriToolCall(requestId), toolName, found.handler, argsJson, callback)
             }
         }
 
@@ -95,20 +91,6 @@ abstract class AriToolProviderService : Service() {
         AriToolsContract.PERMISSION_BIND_TOOL_PROVIDER,
         "an Ari tool call needs ${AriToolsContract.PERMISSION_BIND_TOOL_PROVIDER}",
     )
-
-    /**
-     * Caller of the current binder transaction. Only correct on the binder thread.
-     *
-     * Override it only in a test, to name the caller a handler should see. An override in
-     * shipped code makes [AriToolCall.callerPackage] report a caller that never called.
-     */
-    protected open fun callingPackage(): String {
-        val manager = packageManager ?: return ""
-        val uid = Binder.getCallingUid()
-        return manager.getPackagesForUid(uid)?.singleOrNull()
-            ?: manager.getNameForUid(uid)
-            ?: ""
-    }
 
     // The one place a tool name turns into code to run, so every name Ari can
     // send has exactly one answer.
@@ -198,9 +180,11 @@ abstract class AriToolProviderService : Service() {
             Log.w(TAG, "result not serializable for $toolName (${call.requestId})", e)
             return Delivery(UNREADABLE_RESULT.toJson())
         }
-        if (payload.utf8Size() > AriToolsContract.MAX_RESULT_BYTES) {
-            Log.w(TAG, "result over the size cap for $toolName (${call.requestId})")
-            return Delivery(RESULT_TOO_LARGE.toJson())
+        val size = payload.utf8Size()
+        // One check for both caps: the smaller one binds, so a result under it is under both.
+        if (size > RESULT_CAP) {
+            Log.w(TAG, "result of $size bytes over the $RESULT_CAP byte cap for $toolName (${call.requestId})")
+            return Delivery(resultOverCap(size).toJson())
         }
         return Delivery(payload, (result as? AriToolResult.Launch)?.pendingIntent)
     }
@@ -292,10 +276,17 @@ abstract class AriToolProviderService : Service() {
             AriToolsContract.ERROR_CODE_INVALID_ARGUMENT,
             "the arguments are too large for this app",
         )
-        private val RESULT_TOO_LARGE = AriToolResult.Failure(
-            AriToolsContract.ERROR_CODE_APP_ERROR,
-            "the app returned a result that is too large",
+
+        private val RESULT_CAP = minOf(
+            AriToolsContract.MAX_CLOUD_RESULT_BYTES,
+            AriToolsContract.MAX_RESULT_BYTES,
         )
+
+        private fun resultOverCap(size: Int) = AriToolResult.Failure(
+            AriToolsContract.ERROR_CODE_APP_ERROR,
+            "the app returned a result of $size bytes, and Ari accepts at most $RESULT_CAP bytes",
+        )
+
         private val UNKNOWN_TOOL = AriToolResult.Failure(
             AriToolsContract.ERROR_CODE_UNKNOWN_TOOL,
             "the app declares no tool with this name",

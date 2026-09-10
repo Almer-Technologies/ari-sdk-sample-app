@@ -54,37 +54,23 @@ class AriToolProviderServiceTest {
         override fun asBinder(): IBinder? = null
     }
 
-    private class CallerRecordingService(private val caller: String) : AriToolProviderService() {
+    private class PermissionRecordingService : AriToolProviderService() {
+        val gated = mutableListOf<String>()
         val steps = mutableListOf<String>()
+        private var current = "?"
 
-        override fun callingPackage(): String {
-            steps += "identity"
-            return caller
+        override fun enforceAriPermission() {
+            gated += current
+            steps += "permission"
         }
 
         override fun tools(): AriToolRegistry = ariTools {
             tool(TOOL, DESCRIPTION) {
                 handle {
-                    steps += "invoke"
-                    AriToolResult.ok {
-                        putString("caller", callerPackage)
-                        putString("request", requestId)
-                    }
+                    steps += "handler"
+                    AriToolResult.ok()
                 }
             }
-        }
-    }
-
-    private class PermissionRecordingService : AriToolProviderService() {
-        val gated = mutableListOf<String>()
-        private var current = "?"
-
-        override fun enforceAriPermission() {
-            gated += current
-        }
-
-        override fun tools(): AriToolRegistry = ariTools {
-            tool(TOOL, DESCRIPTION) { handle { AriToolResult.ok() } }
         }
 
         fun callInvoke() {
@@ -147,6 +133,14 @@ class AriToolProviderServiceTest {
     private fun serviceThrowing(throwable: Throwable) = RegistryService {
         tool(TOOL, DESCRIPTION) { handle { throw throwable } }
     }
+
+    // The envelope keys cost bytes too, so the blob is what is left of the target size.
+    private fun resultOfExactly(bytes: Int): AriToolResult {
+        val envelope = AriToolResult.ok { putString(BLOB, "") }.toJson().utf8Bytes()
+        return AriToolResult.ok { putString(BLOB, "x".repeat(bytes - envelope)) }
+    }
+
+    private fun String.utf8Bytes(): Int = toByteArray(Charsets.UTF_8).size
 
     private fun AriToolProviderService.invokeAndRecord(
         argsJson: String = "",
@@ -307,51 +301,35 @@ class AriToolProviderServiceTest {
     }
 
     @Test
-    fun `the caller package and the request id reach the handler`() {
-        val service = CallerRecordingService("com.ari_os.ari")
+    fun `the request id reaches the handler`() {
+        val service = RegistryService {
+            tool(TOOL, DESCRIPTION) { handle { AriToolResult.ok { putString("request", requestId) } } }
+        }
 
         val callback = service.invokeAndRecord()
 
         val data = JSONObject(requireNotNull(callback.resultJson)).getJSONObject("data")
-        assertEquals("com.ari_os.ari", data.getString("caller"))
         assertEquals("req-1", data.getString("request"))
     }
 
-    @Test
-    fun `an unnamed caller reaches the handler as an empty package`() {
-        var seen: AriToolCall? = null
-        val service = RegistryService {
-            tool(TOOL, DESCRIPTION) {
-                handle {
-                    seen = this
-                    AriToolResult.ok()
-                }
-            }
-        }
-
-        service.invokeAndRecord()
-
-        assertEquals("", requireNotNull(seen).callerPackage)
-    }
-
     /**
-     * Binder.getCallingUid() names the caller only on the binder thread. Read
-     * after a dispatch it returns this process's own uid, which would authorise
-     * every caller. A dispatcher that queues instead of running inline shows
-     * whether the read happens before the coroutine starts.
+     * enforceCallingPermission() names the caller only on the binder thread. Called
+     * after a dispatch it reads this process's own permissions, which would authorise
+     * every caller. A dispatcher that queues instead of running inline shows whether
+     * the gate runs before the coroutine starts.
      */
     @Test
-    fun `the caller identity is read before the invocation is dispatched`() {
+    fun `the permission is enforced before the invocation is dispatched`() {
         val scheduler = TestCoroutineScheduler()
         Dispatchers.setMain(StandardTestDispatcher(scheduler))
-        val service = CallerRecordingService("com.ari_os.ari")
+        val service = PermissionRecordingService()
 
         service.invokeAndRecord()
 
-        assertEquals(listOf("identity"), service.steps)
+        assertEquals(listOf("permission"), service.steps)
 
         scheduler.advanceUntilIdle()
-        assertEquals(listOf("identity", "invoke"), service.steps)
+        assertEquals(listOf("permission", "handler"), service.steps)
     }
 
     @Test
@@ -378,13 +356,14 @@ class AriToolProviderServiceTest {
     }
 
     @Test
-    fun `the test harness reports the caller the service names`() {
-        val service = CallerRecordingService("com.ari_os.ari")
+    fun `the test harness reports the request id it names`() {
+        val service = RegistryService {
+            tool(TOOL, DESCRIPTION) { handle { AriToolResult.ok { putString("request", requestId) } } }
+        }
 
         val result = service.invokeToolInTest(TOOL)
 
-        assertEquals("com.ari_os.ari", (result as AriToolResult.Ok).payload.string("caller"))
-        assertEquals("test-request", result.payload.string("request"))
+        assertEquals("test-request", (result as AriToolResult.Ok).payload.string("request"))
     }
 
     @Test
@@ -435,17 +414,49 @@ class AriToolProviderServiceTest {
     }
 
     /**
-     * Binder limits bytes, not characters. A euro sign is three UTF-8 bytes, so
+     * The cap counts bytes, not characters. A euro sign is three UTF-8 bytes, so
      * a payload can sit under the cap in characters and far over it in bytes.
      */
     @Test
     fun `a result is capped by bytes, not by characters`() {
-        val multiByte = "\u20ac".repeat(AriToolsContract.MAX_RESULT_BYTES / 2)
+        val multiByte = "\u20ac".repeat(AriToolsContract.MAX_CLOUD_RESULT_BYTES / 2)
         val service = serviceReturning(AriToolResult.ok { putString("blob", multiByte) })
 
         val callback = service.invokeAndRecord()
 
         assertEquals(AriToolsContract.ERROR_CODE_APP_ERROR, callback.errorCode())
+    }
+
+    @Test
+    fun `a result at the cloud cap still reaches Ari`() {
+        val service = serviceReturning(resultOfExactly(AriToolsContract.MAX_CLOUD_RESULT_BYTES))
+
+        val callback = service.invokeAndRecord()
+
+        assertTrue(JSONObject(requireNotNull(callback.resultJson)).getBoolean("ok"))
+    }
+
+    @Test
+    fun `a result one byte over the cloud cap never crosses binder`() {
+        val over = AriToolsContract.MAX_CLOUD_RESULT_BYTES + 1
+        val service = serviceReturning(resultOfExactly(over))
+
+        val callback = service.invokeAndRecord()
+
+        assertEquals(AriToolsContract.ERROR_CODE_APP_ERROR, callback.errorCode())
+        val message = callback.errorMessage()
+        assertTrue(message, message.contains("$over bytes"))
+        assertTrue(message, message.contains("${AriToolsContract.MAX_CLOUD_RESULT_BYTES} bytes"))
+    }
+
+    /** The cloud cap is the smaller one, so it is the number a partner reads. */
+    @Test
+    fun `a result over both caps names the cloud cap`() {
+        val service = serviceReturning(resultOfExactly(AriToolsContract.MAX_RESULT_BYTES + 1))
+
+        val message = service.invokeAndRecord().errorMessage()
+
+        assertTrue(message, message.contains("${AriToolsContract.MAX_CLOUD_RESULT_BYTES} bytes"))
     }
 
     @Test
@@ -669,5 +680,6 @@ class AriToolProviderServiceTest {
     private companion object {
         const val TOOL = "set_circle_color"
         const val DESCRIPTION = "Sets the colour of the circle shown in the app."
+        const val BLOB = "blob"
     }
 }

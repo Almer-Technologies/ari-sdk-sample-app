@@ -58,10 +58,27 @@ class AriToolsContractTest {
         assertEquals(64, binderBufferBytes / (AriToolsContract.MAX_ARGS_BYTES * utf16CostPerAsciiByte))
     }
 
+    /** The Ari cloud holds the same number, so a change here without one there drops results. */
+    @Test
+    fun `the cloud result cap is the smaller of the two result caps`() {
+        assertEquals(8 * 1024, AriToolsContract.MAX_CLOUD_RESULT_BYTES)
+        assertTrue(AriToolsContract.MAX_CLOUD_RESULT_BYTES < AriToolsContract.MAX_RESULT_BYTES)
+        assertEquals(AriToolsContract.MAX_ARGS_BYTES, AriToolsContract.MAX_CLOUD_RESULT_BYTES)
+    }
+
     @Test
     fun `declaration caps match the published contract`() {
-        assertEquals(8, AriToolsContract.MAX_TOOLS_PER_PROVIDER)
+        assertEquals(64 * 1024, AriToolsContract.MAX_DECLARATION_BYTES)
         assertEquals(300, AriToolsContract.MAX_DESCRIPTION_LENGTH)
+        assertEquals(32, AriToolsContract.MAX_LIST_ELEMENTS)
+        assertEquals(32, AriToolsContract.MAX_ENUM_VALUES)
+        assertEquals(64, AriToolsContract.MAX_ENUM_VALUE_LENGTH)
+    }
+
+    /** A list over a whole declared value set must still fit. */
+    @Test
+    fun `the list element cap clears the enum value cap`() {
+        assertTrue(AriToolsContract.MAX_LIST_ELEMENTS >= AriToolsContract.MAX_ENUM_VALUES)
     }
 
     @Test

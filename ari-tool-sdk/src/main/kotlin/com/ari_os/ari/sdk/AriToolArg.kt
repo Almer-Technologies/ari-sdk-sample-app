@@ -14,8 +14,15 @@ private const val TYPE_INT = "int"
 private const val TYPE_NUMBER = "number"
 private const val TYPE_BOOL = "bool"
 private const val TYPE_ENUM = "enum"
+private const val TYPE_INT_LIST = "int_list"
+private const val TYPE_STRING_LIST = "string_list"
 
-/** One declared argument of a tool. Only [EnumArg] carries allowed values. */
+/**
+ * One declared argument of a tool. Only [EnumArg] carries allowed values.
+ *
+ * A list type carries a set the tool acts on in one call, so the user confirms it once.
+ * No list type may fill a deeplink uri placeholder.
+ */
 @Serializable(with = AriToolArgSerializer::class)
 sealed interface AriToolArg {
 
@@ -82,12 +89,44 @@ sealed interface AriToolArg {
         init {
             requireDeclaredArg(name, description)
             require(values.isNotEmpty()) { "arg '$name': type enum needs values" }
+            require(values.size <= AriToolsContract.MAX_ENUM_VALUES) {
+                "arg '$name': at most ${AriToolsContract.MAX_ENUM_VALUES} enum values, " +
+                    "and this one declares ${values.size}"
+            }
             require(values.none { value -> value.isBlank() }) {
                 "arg '$name': enum values must not be blank"
+            }
+            values.forEach { value ->
+                require(value.length <= AriToolsContract.MAX_ENUM_VALUE_LENGTH) {
+                    "arg '$name': enum value '${value.take(MAX_ECHOED_LENGTH)}' is " +
+                        "${value.length} chars, over ${AriToolsContract.MAX_ENUM_VALUE_LENGTH}"
+                }
             }
             require(values.toSet().size == values.size) {
                 "arg '$name': enum values must not repeat"
             }
+        }
+    }
+
+    /** An argument the model fills with whole numbers. */
+    data class IntListArg(
+        override val name: String,
+        override val required: Boolean = false,
+        override val description: String = "",
+    ) : AriToolArg {
+        init {
+            requireDeclaredArg(name, description)
+        }
+    }
+
+    /** An argument the model fills with free text values. */
+    data class StringListArg(
+        override val name: String,
+        override val required: Boolean = false,
+        override val description: String = "",
+    ) : AriToolArg {
+        init {
+            requireDeclaredArg(name, description)
         }
     }
 }
@@ -128,6 +167,8 @@ private fun AriToolArg.toSurrogate(): ArgSurrogate {
         is AriToolArg.NumberArg -> TYPE_NUMBER
         is AriToolArg.BoolArg -> TYPE_BOOL
         is AriToolArg.EnumArg -> TYPE_ENUM
+        is AriToolArg.IntListArg -> TYPE_INT_LIST
+        is AriToolArg.StringListArg -> TYPE_STRING_LIST
     }
     return ArgSurrogate(
         name = name,
@@ -170,6 +211,18 @@ private fun ArgSurrogate.toArg(): AriToolArg {
         TYPE_ENUM -> AriToolArg.EnumArg(
             name = name,
             values = values.orEmpty(),
+            required = required,
+            description = description,
+        )
+
+        TYPE_INT_LIST -> AriToolArg.IntListArg(
+            name = name,
+            required = required,
+            description = description,
+        )
+
+        TYPE_STRING_LIST -> AriToolArg.StringListArg(
+            name = name,
             required = required,
             description = description,
         )

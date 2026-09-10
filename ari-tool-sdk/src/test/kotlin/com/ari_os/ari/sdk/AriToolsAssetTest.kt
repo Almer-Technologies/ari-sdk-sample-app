@@ -60,9 +60,36 @@ class AriToolsAssetTest {
         }
     }
 
+    private fun removeCircles() = ariTools(label = LABEL) {
+        tool("remove_circles", "Removes the circles with these numbers.", confirm = true) {
+            intList("numbers", description = "The circle numbers to remove.", required = true)
+            handle { AriToolResult.ok() }
+        }
+    }
+
     private fun freeTextDeeplink() = ariTools(label = LABEL) {
         deeplink("open_room", "Opens the room with this id.", uri = "aridemo://room/{room_id}") {
             freeTextInUri("room_id", "The room id, as printed on the door.", required = true)
+        }
+    }
+
+    private fun labelled(label: String) = ariTools(label = label) {
+        tool("take_note", "Takes a note.") { handle { AriToolResult.ok() } }
+    }
+
+    // The label is the only declared text with no length rule, so it is the knob that
+    // lands the asset on an exact byte count.
+    private fun registryOfExactly(bytes: Int): AriToolRegistry {
+        val fixed = AriToolsAsset.encode(labelled("")).toByteArray(Charsets.UTF_8).size
+        return labelled("x".repeat(bytes - fixed))
+    }
+
+    private fun longCatalogue() = ariTools(label = LABEL) {
+        repeat(CATALOGUE_TOOLS) { index ->
+            val description = "x".repeat(AriToolsContract.MAX_DESCRIPTION_LENGTH)
+            tool("take_note_%03d".format(index), description) {
+                handle { AriToolResult.ok() }
+            }
         }
     }
 
@@ -100,6 +127,30 @@ class AriToolsAssetTest {
         assertEquals(WITHOUT_NEW_FIELDS_ASSET, encoded)
         assertFalse(encoded, encoded.contains("presentsUi"))
         assertFalse(encoded, encoded.contains("uri"))
+    }
+
+    @Test
+    fun `a list arg round trips through the asset`() {
+        val registry = removeCircles()
+
+        val encoded = AriToolsAsset.encode(registry)
+
+        assertEquals(LIST_ARG_ASSET, encoded)
+        val decoded = Json.decodeFromString(AriToolDeclarationFile.serializer(), encoded)
+        assertEquals(registry.declarations, decoded.tools)
+    }
+
+    /**
+     * An older host rejects the type value and drops that one tool, so it never misreads
+     * the file. The version sits on the file, so raising it would cost a provider every
+     * tool it declares, including the ones that use no list.
+     */
+    @Test
+    fun `a list arg does not move the declaration version`() {
+        val encoded = AriToolsAsset.encode(removeCircles())
+
+        assertTrue(encoded, encoded.contains("\"declarationVersion\": 2,"))
+        assertEquals(2, AriToolsContract.DECLARATION_VERSION)
     }
 
     @Test
@@ -141,6 +192,55 @@ class AriToolsAssetTest {
 
         assertFalse(encoded, encoded.contains("label"))
         assertTrue(encoded, encoded.startsWith("{\n  \"declarationVersion\": 2,"))
+    }
+
+    @Test
+    fun `an asset at the size cap encodes`() {
+        val encoded = AriToolsAsset.encode(registryOfExactly(AriToolsContract.MAX_DECLARATION_BYTES))
+
+        assertEquals(
+            AriToolsContract.MAX_DECLARATION_BYTES,
+            encoded.toByteArray(Charsets.UTF_8).size,
+        )
+    }
+
+    @Test
+    fun `an asset one byte over the size cap fails the build`() {
+        val over = AriToolsContract.MAX_DECLARATION_BYTES + 1
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            AriToolsAsset.encode(registryOfExactly(over))
+        }
+
+        val message = error.message.orEmpty()
+        assertTrue(message, message.contains(AriToolsContract.DECLARATION_ASSET))
+        assertTrue(message, message.contains("$over bytes"))
+        assertTrue(message, message.contains("${AriToolsContract.MAX_DECLARATION_BYTES} bytes"))
+    }
+
+    @Test
+    fun `a catalogue over the size cap writes no asset`() {
+        val assets = folder.newFolder("assets")
+
+        assertThrows(IllegalStateException::class.java) {
+            AriToolsAsset.writeTo(assets, longCatalogue())
+        }
+
+        assertFalse(File(assets, AriToolsContract.DECLARATION_ASSET).exists())
+    }
+
+    /** encode is the one choke point, so the size answers before the drift compare. */
+    @Test
+    fun `a catalogue over the size cap reports its size, not drift`() {
+        val assets = folder.newFolder("assets")
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            AriToolsAsset.requireMatches(assets, longCatalogue())
+        }
+
+        val message = error.message.orEmpty()
+        assertTrue(message, message.contains("reads at most"))
+        assertFalse(message, message.contains("does not match the tool registry"))
     }
 
     @Test
@@ -223,6 +323,10 @@ class AriToolsAssetTest {
     private companion object {
         const val LABEL = "Ari Demo"
 
+        // Enough tools to clear the cap: each one writes its name, its description and
+        // its braces, so 300 chars of description alone already pass 64 KiB.
+        const val CATALOGUE_TOOLS = 256
+
         // The host decodes these keys, so an edit here is a wire change, not a fix.
         // Must stay identical to the example in README.md.
         val WITHOUT_NEW_FIELDS_ASSET = """
@@ -249,6 +353,33 @@ class AriToolsAssetTest {
                       ],
                       "required": true,
                       "description": "The colour to change the circle to."
+                    }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent() + "\n"
+
+        val LIST_ARG_ASSET = """
+            {
+              "declarationVersion": 2,
+              "protocolVersion": 1,
+              "capabilities": [
+                "cancel",
+                "launch_result"
+              ],
+              "label": "Ari Demo",
+              "tools": [
+                {
+                  "name": "remove_circles",
+                  "description": "Removes the circles with these numbers.",
+                  "confirm": true,
+                  "args": [
+                    {
+                      "name": "numbers",
+                      "type": "int_list",
+                      "required": true,
+                      "description": "The circle numbers to remove."
                     }
                   ]
                 }

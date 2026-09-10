@@ -161,16 +161,71 @@ object AriToolsContract {
     const val MAX_RESULT_BYTES = 64 * 1024
 
     /**
+     * Max size of one result envelope the Ari cloud keeps, in UTF-8 bytes. The smaller of the
+     * two result caps, and the one that binds, so a provider builds against this number.
+     *
+     * The Ari cloud discards a larger result and tells the model the app returned too much
+     * data. So this is context economics, not transport: the cloud re-sends a tool result to
+     * the model on every later turn of the session.
+     *
+     * The cloud measures the data the tool returned, and the SDK measures the whole envelope,
+     * so the SDK refuses a result about thirty bytes earlier.
+     *
+     * The Ari cloud's app tools service mirrors this number. Both must hold the same value, or
+     * a result passes one layer and is dropped by another. It is also the number
+     * [MAX_ARGS_BYTES] holds, in the other direction.
+     */
+    const val MAX_CLOUD_RESULT_BYTES = 8 * 1024
+
+    /**
      * Max size of one arguments object, in UTF-8 bytes. Larger arguments report
      * [ERROR_CODE_INVALID_ARGUMENT] and never reach the tool.
      */
     const val MAX_ARGS_BYTES = 8 * 1024
 
-    /** Max tools a single provider may declare. */
-    const val MAX_TOOLS_PER_PROVIDER = 8
+    /**
+     * Max size of the generated [DECLARATION_ASSET], in UTF-8 bytes. A larger asset fails the
+     * provider's own build.
+     *
+     * The Ari app's declaration reader mirrors this number. Both must hold the same value, or
+     * a declaration passes the build and is refused on the device.
+     *
+     * Nothing caps how many tools one provider declares, so this is the only bound on the size
+     * of its catalogue.
+     */
+    const val MAX_DECLARATION_BYTES = 64 * 1024
 
     /** Max length of a tool's description string. */
     const val MAX_DESCRIPTION_LENGTH = 300
+
+    /**
+     * Max values one enum argument may declare.
+     *
+     * The Ari app and the Ari cloud mirror this number. All three must hold the same value,
+     * or a declaration passes one layer and is refused by another.
+     */
+    const val MAX_ENUM_VALUES = 32
+
+    /**
+     * Max length of one enum value, in chars.
+     *
+     * The Ari app and the Ari cloud mirror this number. All three must hold the same value,
+     * or a declaration passes one layer and is refused by another.
+     */
+    const val MAX_ENUM_VALUE_LENGTH = 64
+
+    /**
+     * Max elements one list argument may carry. A longer list reports
+     * [ERROR_CODE_INVALID_ARGUMENT] and never reaches the tool.
+     *
+     * [MAX_ARGS_BYTES] already bounds the transaction, so this bounds something else:
+     * how many actions one confirmation authorizes. A list argument exists so the user
+     * says yes once for a set, which makes the size of that set the thing to cap.
+     *
+     * It also clears [MAX_ENUM_VALUES], so a list over a whole declared value set
+     * still fits.
+     */
+    const val MAX_LIST_ELEMENTS = 32
 
     /** The shape every tool `name` and arg `name` must have: lowercase snake_case. */
     val TOOL_NAME_REGEX = Regex("^[a-z][a-z0-9_]{0,31}$")

@@ -67,6 +67,8 @@ class AriToolDeclarationTest {
                 required = true,
                 description = "The colour.",
             ),
+            AriToolArg.IntListArg(name = "numbers", required = true, description = "Numbers."),
+            AriToolArg.StringListArg(name = "tags", description = "Tags."),
         ),
     )
 
@@ -113,6 +115,28 @@ class AriToolDeclarationTest {
             AriToolArg.EnumArg(name = "a", values = listOf("x")),
             decodeArg("""{"name":"a","type":"enum","values":["x"]}"""),
         )
+    }
+
+    @Test
+    fun `every list type keeps its documented wire string`() {
+        assertEquals(AriToolArg.IntListArg(name = "a"), decodeArgOfType("int_list"))
+        assertEquals(AriToolArg.StringListArg(name = "a"), decodeArgOfType("string_list"))
+    }
+
+    /** A list of lists has no wire string, so no declaration can ask for one. */
+    @Test
+    fun `a list of lists is not a type`() {
+        assertThrows(SerializationException::class.java) { decodeArgOfType("int_list_list") }
+        assertThrows(SerializationException::class.java) { decodeArgOfType("list") }
+    }
+
+    @Test
+    fun `a list arg cannot carry values`() {
+        val error = assertThrows(SerializationException::class.java) {
+            decodeArg("""{"name":"numbers","type":"int_list","values":["1"]}""")
+        }
+
+        assertTrue(error.message, error.message.orEmpty().contains("only type enum takes values"))
     }
 
     @Test
@@ -172,6 +196,37 @@ class AriToolDeclarationTest {
             "arg 'color': enum values must not be blank",
             """{"name":"color","type":"enum","values":["red"," "]}""",
         ) { AriToolArg.EnumArg(name = "color", values = listOf("red", " ")) }
+    }
+
+    @Test
+    fun `an enum arg over the value cap is rejected`() {
+        val over = MAX_ENUM_VALUES + 1
+        val values = (1..over).map { index -> "value_$index" }
+
+        assertArgRejected(
+            "arg 'color': at most $MAX_ENUM_VALUES enum values, and this one declares $over",
+            """{"name":"color","type":"enum","values":[${values.joinToString(",") { "\"$it\"" }}]}""",
+        ) { AriToolArg.EnumArg(name = "color", values = values) }
+    }
+
+    @Test
+    fun `exactly the enum value cap is accepted`() {
+        val values = (1..MAX_ENUM_VALUES).map { index -> "value_$index" }
+
+        val arg = AriToolArg.EnumArg(name = "color", values = values)
+
+        assertEquals(values, arg.values)
+    }
+
+    @Test
+    fun `an enum value over the length cap is rejected`() {
+        val value = "v".repeat(MAX_ENUM_VALUE_LENGTH + 1)
+
+        assertArgRejected(
+            "arg 'color': enum value '${value.take(MAX_ECHOED)}' is ${value.length} chars, " +
+                "over $MAX_ENUM_VALUE_LENGTH",
+            """{"name":"color","type":"enum","values":["$value"]}""",
+        ) { AriToolArg.EnumArg(name = "color", values = listOf(value)) }
     }
 
     @Test
@@ -485,6 +540,50 @@ class AriToolDeclarationTest {
         )
     }
 
+    /** A set has no meaning as one uri component, so the SDK picks no separator. */
+    @Test
+    fun `an int list arg cannot fill a placeholder`() {
+        assertToolRejected(
+            "tool 'open_work_order': arg 'number' is a list, " +
+                "so it cannot fill a uri placeholder",
+            DOCUMENTED_URI_TOOL.replace(""""type": "int"""", """"type": "int_list""""),
+        ) { openWorkOrder(args = listOf(AriToolArg.IntListArg(name = "number", required = true))) }
+    }
+
+    @Test
+    fun `a string list arg cannot fill a placeholder`() {
+        assertToolRejected(
+            "tool 'open_work_order': arg 'number' is a list, " +
+                "so it cannot fill a uri placeholder",
+            DOCUMENTED_URI_TOOL.replace(""""type": "int"""", """"type": "string_list""""),
+        ) {
+            openWorkOrder(args = listOf(AriToolArg.StringListArg(name = "number", required = true)))
+        }
+    }
+
+    /** Naming a list as free text must not buy it a placeholder either. */
+    @Test
+    fun `a list arg named as free text is still refused`() {
+        assertToolRejected(
+            "tool 'open_room': arg 'room_id' is a list, so it cannot fill a uri placeholder",
+            FREE_TEXT_URI_TOOL.replace(""""type": "string"""", """"type": "string_list""""),
+        ) {
+            openRoom(args = listOf(AriToolArg.StringListArg(name = "room_id", required = true)))
+        }
+    }
+
+    @Test
+    fun `an optional list arg a deeplink leaves out is accepted`() {
+        val tool = openWorkOrder(
+            args = listOf(
+                AriToolArg.IntArg(name = "number", required = true),
+                AriToolArg.IntListArg(name = "extras"),
+            ),
+        )
+
+        assertEquals("hpfield://order/{number}", tool.uri)
+    }
+
     /** The model writes the text, so a string in a placeholder is a value nothing bounds. */
     @Test
     fun `a string arg the tool does not name as free text cannot fill a placeholder`() {
@@ -645,6 +744,9 @@ class AriToolDeclarationTest {
         val MAX_DESCRIPTION = AriToolsContract.MAX_DESCRIPTION_LENGTH
         val TOO_LONG_DESCRIPTION = "d".repeat(MAX_DESCRIPTION + 1)
 
+        val MAX_ENUM_VALUES = AriToolsContract.MAX_ENUM_VALUES
+        val MAX_ENUM_VALUE_LENGTH = AriToolsContract.MAX_ENUM_VALUE_LENGTH
+
         const val TOOL_WITHOUT_NAME = """{"description":"Does something else."}"""
 
         val TOOL_WITH_TYPELESS_ARG = """
@@ -664,7 +766,10 @@ class AriToolDeclarationTest {
                 """{"name":"ratio","type":"number","description":"A ratio."},""" +
                 """{"name":"loud","type":"bool","required":true,"description":"Loud?"},""" +
                 """{"name":"color","type":"enum","values":["red","green"],"required":true,""" +
-                """"description":"The colour."}]}"""
+                """"description":"The colour."},""" +
+                """{"name":"numbers","type":"int_list","required":true,""" +
+                """"description":"Numbers."},""" +
+                """{"name":"tags","type":"string_list","description":"Tags."}]}"""
 
         const val EVERY_ARG_TYPE_WIRE_WITH_DEFAULTS =
             """{"name":"probe","description":"Probe.","confirm":true,"args":[""" +
@@ -673,7 +778,11 @@ class AriToolDeclarationTest {
                 """{"name":"ratio","type":"number","required":false,"description":"A ratio."},""" +
                 """{"name":"loud","type":"bool","required":true,"description":"Loud?"},""" +
                 """{"name":"color","type":"enum","values":["red","green"],"required":true,""" +
-                """"description":"The colour."}]}"""
+                """"description":"The colour."},""" +
+                """{"name":"numbers","type":"int_list","required":true,""" +
+                """"description":"Numbers."},""" +
+                """{"name":"tags","type":"string_list","required":false,""" +
+                """"description":"Tags."}]}"""
 
         val FREE_TEXT_KEY = AriToolsContract.FIELD_FREE_TEXT_URI_ARGS
 

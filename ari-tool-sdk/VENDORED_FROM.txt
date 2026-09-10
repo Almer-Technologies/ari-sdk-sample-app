@@ -1,13 +1,19 @@
-eb333c3076d9af22e1c004e6f0f2c9445c81c180
-leviathan libs/ari-tool-protocol and libs/ari-tool-sdk, branch MOBILE-2340-ari-tool-sdk
+417ade70511bdad672d88dc35160831f66324347
+leviathan libs/ari-tool-sdk, branch MOBILE-2340-ari-tool-sdk
 
-Both vendored modules are byte-for-byte upstream except their build.gradle.kts.
-Upstream builds them with leviathan's convention plugins (realwear.android.library,
+One module, and it holds everything: the two AIDL interfaces, AriToolsContract,
+and the SDK built on them. Upstream used to split the frozen wire contract into
+a second module, libs/ari-tool-protocol, and merged it back in at the commit
+above; this copy followed. Anything here that still says "protocol module" is
+stale.
+
+The vendored module is byte-for-byte upstream except its build.gradle.kts.
+Upstream builds it with leviathan's convention plugins (realwear.android.library,
 realwear.android.publish, realwear.kotlinx.serialization, realwear.detekt) and its
-version catalog, none of which exist here, so each module's build.gradle.kts is a
-plain-AGP rewrite that reproduces the same settings and the same dependency
-versions. Everything under src/, plus consumer-rules.pro, LICENSE and README.md,
-is copied unmodified — including upstream's own unit tests, which run here.
+version catalog, none of which exist here, so build.gradle.kts is a plain-AGP
+rewrite that reproduces the same settings and the same dependency versions.
+Everything under src/, plus consumer-rules.pro, LICENSE and README.md, is copied
+unmodified — including upstream's own unit tests, which run here.
 
 src/androidTest is copied too, but NOTHING HERE RUNS IT. Upstream added
 AriToolDeclarationInstrumentedTest because Android compiles a regex with ICU and
@@ -19,15 +25,17 @@ judgement call, and a partner with a headset can run it themselves.
 
 To refresh, re-copy from that branch and update the commit above. Do not edit
 the sources. Refresh by diffing the whole tree, not by trusting a list of changed
-files — `diff -r -x build -x .gradle -x .kotlin <upstream>/libs/<module> ./<module>`.
-Upstream's own summary of what moved has been incomplete before.
+files — `diff -r -x build -x .gradle -x .kotlin <upstream>/libs/ari-tool-sdk
+./ari-tool-sdk`. Upstream's own summary of what moved has been incomplete before:
+the merge above also removed MAX_TOOLS_PER_PROVIDER, added the enum and list-element
+caps, added the int_list and string_list argument types, and added a second result
+cap — none of which its subject lines mention.
 
 Why this is still vendored: upstream has maven-publish wired up
-(AndroidLibraryPublishConventionPlugin, group com.ari_os.ari, version 0.1.0),
+(AndroidLibraryPublishConventionPlugin, group com.ari_os, version 0.1.0),
 but the plugin carries "TODO MOBILE-2340: add the RealWear remote repository
 once it exists" and publishToMavenLocal is the only working target. Once that
-repository exists, replace both include(...) lines in settings.gradle.kts and
-app's implementation(project(":ari-tool-sdk")) with
-implementation("com.ari_os.ari:ari-tool-sdk:<version>"); the protocol module
-arrives with it, because the SDK exposes it with `api` scope. That deletes both
-vendored module directories, this file, and the drift it documents.
+repository exists, replace the include(":ari-tool-sdk") line in
+settings.gradle.kts and app's implementation(project(":ari-tool-sdk")) with
+implementation("com.ari_os:ari-tool-sdk:<version>"). That deletes this module
+directory, this file, and the drift it documents.

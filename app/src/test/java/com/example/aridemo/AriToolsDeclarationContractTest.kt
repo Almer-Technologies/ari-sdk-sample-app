@@ -79,11 +79,7 @@ class AriToolsDeclarationContractTest {
     }
 
     @Test
-    fun `the asset declares no more tools than a provider may`() {
-        assertTrue(
-            "${decoded.tools.size} tools, cap is ${AriToolsContract.MAX_TOOLS_PER_PROVIDER}",
-            decoded.tools.size <= AriToolsContract.MAX_TOOLS_PER_PROVIDER,
-        )
+    fun `the asset declares at least one tool`() {
         assertTrue("the asset declares no tools", decoded.tools.isNotEmpty())
     }
 

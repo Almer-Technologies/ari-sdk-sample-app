@@ -19,7 +19,12 @@ private val ASSET_JSON = Json {
  */
 object AriToolsAsset {
 
-    /** Asset text for [registry]: fixed key order, two-space indent, trailing newline. */
+    /**
+     * Asset text for [registry]: fixed key order, two-space indent, trailing newline.
+     *
+     * @throws IllegalStateException when the text is over
+     *   [AriToolsContract.MAX_DECLARATION_BYTES], which the Ari app refuses to read.
+     */
     fun encode(registry: AriToolRegistry): String {
         val declaration = AriToolDeclarationFile(
             declarationVersion = AriToolsContract.DECLARATION_VERSION,
@@ -29,7 +34,14 @@ object AriToolsAsset {
             label = registry.label,
             tools = registry.declarations,
         )
-        return ASSET_JSON.encodeToString(AriToolDeclarationFile.serializer(), declaration) + "\n"
+        val text = ASSET_JSON.encodeToString(AriToolDeclarationFile.serializer(), declaration) + "\n"
+        val size = text.toByteArray(Charsets.UTF_8).size
+        check(size <= AriToolsContract.MAX_DECLARATION_BYTES) {
+            "${AriToolsContract.DECLARATION_ASSET} is $size bytes, and Ari reads at most " +
+                "${AriToolsContract.MAX_DECLARATION_BYTES} bytes. " +
+                "Declare fewer tools, or write shorter descriptions."
+        }
+        return text
     }
 
     /** Writes [encode] to [AriToolsContract.DECLARATION_ASSET] inside [assetsDir]. */

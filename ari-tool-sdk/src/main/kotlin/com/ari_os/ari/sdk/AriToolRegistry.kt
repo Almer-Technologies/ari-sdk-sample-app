@@ -18,10 +18,6 @@ class AriToolRegistry internal constructor(
     val tools: List<AriTool>,
 ) {
     init {
-        require(tools.size <= AriToolsContract.MAX_TOOLS_PER_PROVIDER) {
-            "a provider declares at most ${AriToolsContract.MAX_TOOLS_PER_PROVIDER} tools, " +
-                "and this one declares ${tools.size}"
-        }
         val repeated = tools.groupBy { tool -> tool.declaration.name }
             .filterValues { group -> group.size > 1 }
         require(repeated.isEmpty()) { "tool declared twice: ${repeated.keys.joinToString()}" }
@@ -69,6 +65,20 @@ open class AriToolArgsBuilder internal constructor() {
         args += AriToolArg.EnumArg(
             name = name,
             values = values,
+            required = required,
+            description = description,
+        )
+    }
+
+    /** An argument the model fills with whole numbers. */
+    fun intList(name: String, description: String = "", required: Boolean = false) {
+        args += AriToolArg.IntListArg(name = name, required = required, description = description)
+    }
+
+    /** An argument the model fills with free text values. */
+    fun stringList(name: String, description: String = "", required: Boolean = false) {
+        args += AriToolArg.StringListArg(
+            name = name,
             required = required,
             description = description,
         )

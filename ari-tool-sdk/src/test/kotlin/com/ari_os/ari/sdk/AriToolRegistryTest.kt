@@ -11,6 +11,42 @@ import org.junit.Test
 class AriToolRegistryTest {
 
     @Test
+    fun `the list builders reach the declaration`() {
+        val registry = ariTools {
+            tool("remove_circles", "Removes circles.", confirm = true) {
+                intList("numbers", "The numbers to remove.", required = true)
+                stringList("tags", "The tags.")
+                handle { AriToolResult.ok() }
+            }
+        }
+
+        assertEquals(
+            listOf(
+                AriToolArg.IntListArg(
+                    name = "numbers",
+                    required = true,
+                    description = "The numbers to remove.",
+                ),
+                AriToolArg.StringListArg(name = "tags", description = "The tags."),
+            ),
+            registry.declarations.single().args,
+        )
+    }
+
+    @Test
+    fun `a deeplink cannot fill a placeholder from a list arg`() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            ariTools {
+                deeplink("open_orders", "Opens orders.", uri = "hpfield://orders/{numbers}") {
+                    intList("numbers", "The numbers.", required = true)
+                }
+            }
+        }
+
+        assertTrue(error.message, error.message.orEmpty().contains("arg 'numbers' is a list"))
+    }
+
+    @Test
     fun `a declared tool builds the declaration the types already define`() {
         val registry = ariTools(label = "Ari Demo") {
             tool("set_circle_color", "Sets the colour of the circle shown in the app.") {
@@ -83,10 +119,9 @@ class AriToolRegistryTest {
     @Test
     fun `a handler runs with the call as its receiver`() = runTest {
         val registry = ariTools {
-            tool("whoami", "Reports the caller.") {
+            tool("whoami", "Reports the request id.") {
                 handle { args ->
                     AriToolResult.ok {
-                        putString("caller", callerPackage)
                         putString("request", requestId)
                         putString("color", args.string("color"))
                     }
@@ -96,12 +131,11 @@ class AriToolRegistryTest {
 
         val handler = requireNotNull(registry.find("whoami")?.handler)
         val result = handler(
-            AriToolCall("com.ari_os.ari", "req-1"),
+            AriToolCall("req-1"),
             ToolArgs(JSONObject("""{"color":"red"}""")),
         )
 
         val data = JSONObject(result.toJson()).getJSONObject("data")
-        assertEquals("com.ari_os.ari", data.getString("caller"))
         assertEquals("req-1", data.getString("request"))
         assertEquals("red", data.getString("color"))
     }
@@ -218,32 +252,14 @@ class AriToolRegistryTest {
         )
     }
 
-    /**
-     * Ari sends every name and description to the model on every turn, so the cap is
-     * a prompt budget. It fires here, in the partner's own build, not in Ari's log.
-     */
+    /** Nothing caps how many tools a provider declares. The declaration file size does. */
     @Test
-    fun `more tools than the cap allows are rejected`() {
-        val over = AriToolsContract.MAX_TOOLS_PER_PROVIDER + 1
+    fun `a provider may declare many tools`() {
+        val many = 64
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            registryOf(over)
-        }
+        val registry = registryOf(many)
 
-        assertTrue(
-            error.message,
-            error.message.orEmpty().contains(
-                "a provider declares at most ${AriToolsContract.MAX_TOOLS_PER_PROVIDER} tools, " +
-                    "and this one declares $over",
-            ),
-        )
-    }
-
-    @Test
-    fun `exactly the cap is accepted`() {
-        val registry = registryOf(AriToolsContract.MAX_TOOLS_PER_PROVIDER)
-
-        assertEquals(AriToolsContract.MAX_TOOLS_PER_PROVIDER, registry.tools.size)
+        assertEquals(many, registry.tools.size)
     }
 
     @Test

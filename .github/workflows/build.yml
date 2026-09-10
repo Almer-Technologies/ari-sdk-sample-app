@@ -6,10 +6,9 @@
 # compares assets/ari_tools.json to AriToolService's registry.
 #
 # WHAT THIS DOES NOT CATCH: upstream SDK changes breaking a partner.
-# ari-tool-sdk/ and ari-tool-protocol/ are VENDORED COPIES of leviathan's
-# libs/ari-tool-sdk and libs/ari-tool-protocol (see
+# ari-tool-sdk/ is a VENDORED COPY of leviathan's libs/ari-tool-sdk (see
 # ari-tool-sdk/VENDORED_FROM.txt). A green run proves THIS COPY compiles and
-# its tests pass. It says nothing about the upstream modules, which nothing
+# its tests pass. It says nothing about the upstream module, which nothing
 # here fetches, so upstream can change under this sample and every run stays
 # green until someone re-vendors by hand. That gap closes when the SDK is a
 # published artifact and this repo resolves it as a dependency, not before.
@@ -28,7 +27,7 @@
 # fetch any platform or build-tools it is missing. leviathan runs on
 # self-hosted macOS ARM64 runners because it is a large monorepo with iOS
 # targets, release signing and warm caches; none of that applies to a
-# three-module sample, and a hosted runner keeps this repo forkable by a
+# two-module sample, and a hosted runner keeps this repo forkable by a
 # partner.
 #
 # JDK 21, pinned rather than inherited. AGP 9.1.0 needs 17 or newer, no module
@@ -72,9 +71,9 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           ./gradlew --version
 
-      # Every module named explicitly, so the two vendored SDK modules are
-      # visibly covered — nothing else in the repo runs their suites. Add a new
-      # module here as well as to settings.gradle.kts.
+      # Every module named explicitly, so the vendored SDK module is visibly
+      # covered — nothing else in the repo runs its suite. Add a new module
+      # here as well as to settings.gradle.kts.
       # assembleDebugAndroidTest COMPILES AND PACKAGES the vendored SDK's
       # instrumented tests without running them — no device is involved. It is
       # here because upstream keeps a device test for the declaration's regexes
@@ -87,7 +86,6 @@ jobs:
             :app:assembleDebug \
             :app:testDebugUnitTest \
             :ari-tool-sdk:testDebugUnitTest \
-            :ari-tool-protocol:testDebugUnitTest \
             :ari-tool-sdk:assembleDebugAndroidTest
 
       # The asset is what Ari reads out of the installed APK, so prove it is in

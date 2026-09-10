@@ -36,10 +36,6 @@ object AriTools {
     }
 
     private fun requireAvailableNames(names: Set<String>, registry: AriToolRegistry?) {
-        require(names.size <= AriToolsContract.MAX_TOOLS_PER_PROVIDER) {
-            "at most ${AriToolsContract.MAX_TOOLS_PER_PROVIDER} tools can be available, " +
-                "and this set holds ${names.size}"
-        }
         names.forEach { name -> requireDeclaredName("tool", name) }
         if (registry == null) return
         val declared = registry.declarations.map { tool -> tool.name }.toSet()

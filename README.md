@@ -161,8 +161,9 @@ The registry rejects, as you build it, anything the contract forbids:
 - a tool needs a description, of at most 300 chars
   (`MAX_DESCRIPTION_LENGTH`). It is spent on every LLM turn, so keep it short
   and specific;
-- no two tools may share a name, and no tool may repeat an arg;
-- at most 8 tools per provider (`MAX_TOOLS_PER_PROVIDER`);
+- no two tools may share a name;
+- an `enum` declares at most 32 values (`MAX_ENUM_VALUES`), each of at most 64
+  chars (`MAX_ENUM_VALUE_LENGTH`);
 - a `tool()` needs exactly one `handle { }` block.
 
 So a mistake fails your own build instead of being dropped from Ari's view.
@@ -542,9 +543,6 @@ Five things worth knowing before you copy this:
   looks like. What the link actually opens is not reachable from a JVM; see
   `CircleDeeplinkTest` for how far a static check gets.
 
-To name the caller your handler reads, override `callingPackage()` in a test
-subclass of your service. This app's handlers do not read it, so nothing here
-does.
 
 ## Build and install
 
@@ -559,13 +557,12 @@ Gradle toolchain, so the JDK Gradle itself runs on is the one that compiles the
 code. To run every check, including the declaration drift test:
 
 ```bash
-./gradlew :ari-tool-protocol:testDebugUnitTest :ari-tool-sdk:testDebugUnitTest \
-          :app:testDebugUnitTest
+./gradlew :ari-tool-sdk:testDebugUnitTest :app:testDebugUnitTest
 ```
 
 ## CI
 
-`.github/workflows/build.yml` runs `:app:assembleDebug` and all three modules'
+`.github/workflows/build.yml` runs `:app:assembleDebug` and both modules'
 test tasks on `ubuntu-latest`, then reads `assets/ari_tools.json` back out of
 the built APK and diffs it against the committed source. A hosted runner is
 enough: this build needs a JDK and an Android SDK and nothing else.
@@ -625,19 +622,17 @@ A healthy session logs `Discovered 1 app tool provider(s)`.
 
 ## Why the SDK is vendored here
 
-`ari-tool-protocol/` and `ari-tool-sdk/` are **copies** of leviathan's
-`libs/ari-tool-protocol` and `libs/ari-tool-sdk`. Upstream splits the frozen
-AIDL wire contract from the SDK built on it and publishes them as two artifacts,
-so the copy keeps the same two modules.
+`ari-tool-sdk/` is a **copy** of leviathan's `libs/ari-tool-sdk`, which holds
+the frozen AIDL wire contract and the SDK built on it in one module. Upstream
+used to split the two and merged them back together; this copy followed.
 
 Everything under `src/`, plus `consumer-rules.pro`, `LICENSE` and `README.md`,
 is byte-for-byte upstream — including upstream's own unit tests, which run here
-(197 of them: 16 in `ari-tool-protocol`, 181 in `ari-tool-sdk`) and are what
-shows the copy is faithful rather than merely compiling. Each module's
+and are what shows the copy is faithful rather than merely compiling.
 `build.gradle.kts` is the **only** file that differs: upstream builds with
 leviathan's convention plugins and version catalog, neither of which exists
-here, so each is a plain-AGP rewrite of the same settings and the same
-dependency versions. `ari-tool-sdk/VENDORED_FROM.txt` records the commit.
+here, so it is a plain-AGP rewrite of the same settings and the same dependency
+versions. `ari-tool-sdk/VENDORED_FROM.txt` records the commit.
 
 One exception to "run here": `ari-tool-sdk/src/androidTest` is copied but
 **never executed**. Upstream added `AriToolDeclarationInstrumentedTest` because
@@ -665,19 +660,16 @@ diff -r -x build -x .gradle -x .kotlin <leviathan>/libs/ari-tool-sdk ./ari-tool-
 **Do not edit the copies.** Change the real modules in leviathan and re-copy.
 
 It is still a copy only because there is nowhere to publish to yet. Upstream has
-`maven-publish` wired up (group `com.ari_os.ari`, version `0.1.0`), but the
+`maven-publish` wired up (group `com.ari_os`, version `0.1.0`), but the
 convention plugin carries `TODO MOBILE-2340: add the RealWear remote repository
 once it exists`, and `publishToMavenLocal` is the only working target. Once that
-repository exists, the swap is one dependency: drop both `include(...)` lines
-from `settings.gradle.kts` and replace the app's
+repository exists, the swap is one dependency: drop the `include(":ari-tool-sdk")`
+line from `settings.gradle.kts` and replace the app's
 `implementation(project(":ari-tool-sdk"))` with
 
 ```kotlin
-implementation("com.ari_os.ari:ari-tool-sdk:<version>")
+implementation("com.ari_os:ari-tool-sdk:<version>")
 ```
-
-The protocol module arrives with it, because the SDK exposes it with `api`
-scope.
 
 ## Verified on hardware
 
@@ -707,7 +699,6 @@ Still **not** exercised on hardware:
 
 - `cancel()` and `setAvailable`.
 - Launch results (the `PendingIntent`) and the spoken line that goes with one.
-- `callingPackage` checks.
 - The oversize caps on results and on arguments.
 - Declaration version skew.
 - Saying no at a confirmation.

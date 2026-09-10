@@ -11,21 +11,19 @@ routes LLM tool calls to your app over AIDL.
 **This module is third-party API surface.** It must not depend on internal
 leviathan modules.
 
-## Modules
+## The artifact
 
-The SDK ships as two artifacts under the group `com.ari_os.ari`.
-
-| Artifact | Holds | Depends on |
-|---|---|---|
-| `ari-tool-protocol` | The two AIDL interfaces and `AriToolsContract`. The frozen wire surface. | nothing |
-| `ari-tool-sdk` | `AriToolProviderService`, the `ariTools { }` registry, `AriToolsAsset`, `AriTools`, `AriToolResult`, `AriToolErrorCode`, `AriToolCall`, `ToolArgs`, `invokeToolInTest`, the declaration models. | `ari-tool-protocol`, with `api` scope |
-
-Depend on `ari-tool-sdk` only. It exposes the contract with `api` scope, so the
-protocol arrives with it:
+The SDK ships as one artifact under the group `com.ari_os`:
 
 ```kotlin
-implementation("com.ari_os.ari:ari-tool-sdk:<version>")
+implementation("com.ari_os:ari-tool-sdk:<version>")
 ```
+
+It holds the wire contract — the two AIDL interfaces and `AriToolsContract` —
+next to the code you write against: `AriToolProviderService`, the
+`ariTools { }` registry, `AriToolsAsset`, `AriTools`, `AriToolResult`,
+`AriToolErrorCode`, `AriToolCall`, `ToolArgs`, `invokeToolInTest` and the
+declaration models.
 
 The SDK types use `org.json`, which ships in the framework, so the SDK adds
 nothing to your compile classpath.
@@ -78,10 +76,17 @@ The rules the registry enforces:
 - a tool needs a description, of at most 300 chars. Ari sends it to the LLM on
   every turn, so keep it short and specific;
 - no two tools may share a name;
-- at most 8 tools per provider (`AriToolsContract.MAX_TOOLS_PER_PROVIDER`). Ari
-  sends every name and description on every turn, so this caps the prompt budget
-  one provider claims. The registry rejects a ninth tool, so you see it in your
-  own build, not in Ari's log.
+- an `enum` arg declares at most 32 values (`AriToolsContract.MAX_ENUM_VALUES`),
+  each of at most 64 chars (`AriToolsContract.MAX_ENUM_VALUE_LENGTH`). The Ari
+  app and the Ari cloud hold the same two numbers, so a 33rd value fails in your
+  own build instead of being dropped on the device.
+
+Nothing caps how many tools you declare. Ari sends every name and description to
+the model on every turn, so a long catalogue costs you context on every turn. The
+one bound is the asset itself: `AriToolsAsset` refuses to encode a declaration
+over 64 KiB (`AriToolsContract.MAX_DECLARATION_BYTES`), which is the same number
+the Ari app's reader holds, so an oversized catalogue fails your build instead of
+being dropped on the device.
 
 **`confirm` decides whether Ari asks the user.** The cloud reads the flag on
 both builders. It defaults to `false`, and `false` means the tool runs with no
@@ -104,12 +109,25 @@ model reads to pick a value:
 | `number("ratio")` | `number` | `args.number("ratio")` |
 | `bool("loud")` | `bool` | `args.bool("loud")` |
 | `enum("color", values = listOf("red", "green"))` | `enum` | `args.string("color")` |
+| `intList("numbers")` | `int_list` | `args.intList("numbers")` |
+| `stringList("tags")` | `string_list` | `args.stringList("tags")` |
 
 `required = true` means Ari sends a value on every call. Only `enum` takes
 `values`, because only `AriToolArg.EnumArg` holds them, so a value list on any
 other type cannot be written.
 
-`deeplink()` adds a sixth builder, `freeTextInUri`. It declares a `string` arg
+A list argument carries at most `AriToolsContract.MAX_LIST_ELEMENTS` values. A
+longer list is reported as `invalid_argument` and never reaches your handler, so
+Ari can ask the model for a smaller set.
+
+Declare a list when the user names a set your tool acts on in one go. One call
+is one confirmation, which is the whole point of the type. Four `remove_circle`
+calls ask a user who set `confirm = true` four times, and a bulk tool does not
+fix that in general: you cannot enumerate the predicates a user might say — the
+even ones, the last three, everything except red. A list moves the predicate to
+the model and the resulting set into one call.
+
+`deeplink()` adds another builder, `freeTextInUri`. It declares a `string` arg
 and lets that arg fill a `{placeholder}`. See "Opening a screen with a
 deeplink".
 
@@ -139,6 +157,13 @@ can never ask Ari to send an arbitrary intent.
 **A placeholder takes a constrained type by default.** `int`, `number`, `bool`
 and `enum` may fill one. A `string` may not, because the model writes its text
 and nothing in your declaration limits what it writes.
+
+**A list may never fill a placeholder.** A set has no meaning as one uri
+component, and the SDK will not pick a separator for you. Naming a list in
+`freeTextUriArgs` does not change that. So a **required** list argument cannot
+appear on a `deeplink()` tool at all: it can neither fill a placeholder nor be
+left out of the template. A tool that takes a set belongs in a `tool { }` with a
+`handle { }` block.
 
 Some values are free text by nature. A room id is one. Declare such an argument
 with `freeTextInUri` instead of `string`:
@@ -359,14 +384,8 @@ tool("set_circle_color", "Sets the colour of the circle shown in the app.") {
 }
 ```
 
-Inside `handle { }`, `this` is the `AriToolCall` that carries who called and
-under which id:
-
-- `callerPackage` is the app that bound you, read from the binder transaction.
-  The permission is the gate, so you rarely need this. Check it when one tool
-  needs a stronger rule than the rest. It is empty when the platform names no
-  single package for the caller.
-- `requestId` is the id Ari cancels the invocation by.
+Inside `handle { }`, `this` is the `AriToolCall`. It carries `requestId`, the
+id Ari cancels the invocation by.
 
 A handler runs on the main dispatcher, so touching UI state is safe — and
 blocking there stalls your own main thread. Wrap slow work in
@@ -402,6 +421,8 @@ has two accessors:
 | `int` | `args.int("count")` | `args.intOrNull("count")` |
 | `number` | `args.number("ratio")` | `args.numberOrNull("ratio")` |
 | `bool` | `args.bool("loud")` | `args.boolOrNull("loud")` |
+| `int_list` | `args.intList("numbers")` | `args.intListOrNull("numbers")` |
+| `string_list` | `args.stringList("tags")` | `args.stringListOrNull("tags")` |
 
 `args.has("color")` reports whether an argument holds a value. A JSON `null`
 counts as absent.
@@ -419,6 +440,19 @@ An accessor reads a value of another type when the meaning is unambiguous:
 `"2"` reads as `2` for `int`, and `2` reads as `"2"` for `string`. It returns
 `null` instead of guessing when the value would lose information: `1.5` is not
 an `int`, `"yes"` is not a `bool`, and an object or an array is never text.
+
+A list accessor reads the whole list or nothing. It applies the same
+per-element rule, so `["1", 2]` reads as `[1, 2]`, but one element it cannot
+read voids the call rather than handing your tool a shorter set — the user
+confirmed the set the model sent, not a subset of it. Two more rules follow
+from that:
+
+- An empty list is a value, not a missing argument. `args.intList("numbers")`
+  returns an empty list instead of throwing. Whether an empty set is an error
+  is your tool's own decision.
+- A single value is not a one-element list. `5` reads as `null`, not `[5]`,
+  because that is a difference in how many things the call names rather than in
+  how one value is written.
 
 "Testing a handler" runs a whole tool call from a unit test. To test a helper
 below the handler, build the arguments and the call directly:
@@ -560,8 +594,7 @@ class AriToolServiceTest {
 ```
 
 The call enters your service where Ari enters it, so one test covers the
-permission gate, the caller, the size caps, the argument parsing and the error
-envelope. There is no second code path for a test to prove.
+permission gate, the size caps, the argument parsing and the error envelope. There is no second code path for a test to prove.
 
 Only a test may call it. Shipped code calls it outside a binder transaction,
 where `enforceCallingPermission` always throws.
@@ -590,15 +623,6 @@ throws and names the missing dispatcher. Without `org.json` the stubbed one
 returns defaults, the call reports nothing at all, and `invokeToolInTest` throws
 to say so.
 
-To name the caller your handler reads, override `callingPackage()` in a test
-subclass of your service:
-
-```kotlin
-class AriCallingToolService : AriToolService() {
-    override fun callingPackage() = "com.ari_os.ari"
-}
-```
-
 A JVM unit test cannot cover two things. The permission gate is a framework
 call that the android unit-test jar turns into a no-op, so no test can show it
 denying a caller. `AriToolResult.launch(...)` needs `PendingIntent.isImmutable`,
@@ -608,26 +632,39 @@ failure. Cover both on a device.
 #### Size caps
 
 A result crosses Binder as a JSON string and then enters the LLM prompt, so
-both ends need a ceiling.
+both ends need a ceiling. Your declaration enters the same prompt, so it has
+one too.
 
 | Limit | Value | What breaks it |
 |---|---|---|
-| `AriToolsContract.MAX_RESULT_BYTES` | 64 KiB | the result reports `app_error` and never crosses Binder |
+| `AriToolsContract.MAX_CLOUD_RESULT_BYTES` | 8 KiB | the result reports `app_error` and never crosses Binder |
+| `AriToolsContract.MAX_RESULT_BYTES` | 64 KiB | nothing you can reach: the cap above is smaller |
 | `AriToolsContract.MAX_ARGS_BYTES` | 8 KiB | the call reports `invalid_argument` and no handler runs |
+| `AriToolsContract.MAX_DECLARATION_BYTES` | 64 KiB | `AriToolsAsset` throws, so your build fails |
 
-Both count **UTF-8 bytes of the encoded JSON**, not characters, because that is
-what Binder limits. One euro sign is three bytes, so a payload can look small
-in characters and still break the cap.
+They all count **UTF-8 bytes of the encoded JSON**, not characters. One euro
+sign is three bytes, so a payload can look small in characters and still break
+the cap.
 
-The numbers come from the Binder buffer. A process shares about 1 MB of
+**Build against 8 KiB, not 64 KiB.** `MAX_CLOUD_RESULT_BYTES` is the smaller of
+the two result caps and the one that binds. The Ari cloud discards a larger
+result and tells the model your app returned too much data, so your handler
+would run its side effect and the user would still hear a failure. The SDK
+refuses the result first, with a message naming the limit and the size you
+returned. The cloud measures the data your tool returned and the SDK measures
+the whole envelope, so the SDK refuses about thirty bytes earlier.
+
+The cloud cap is about context, not transport: the cloud re-sends a tool result
+to the model on every later turn of the session, so a large result is paid for
+on every turn, not once. 8 KiB of JSON is roughly 2k to 3k tokens, already more
+than any useful tool result.
+
+`MAX_RESULT_BYTES` comes from the Binder buffer and sits above the cloud cap,
+so the SDK checks the cloud cap alone. A process shares about 1 MB of
 transaction buffer across every call in flight, in both directions, and a
 String crosses Binder as UTF-16. So a 64 KiB ASCII result costs about 128 KB of
-that buffer, and eight of them fit at once. Arguments at 8 KiB cost about 16 KB,
-which is a 64th of the buffer.
-
-They are also generous for the prompt. 64 KiB of JSON is roughly 16k to 22k
-tokens, which is already more than any useful tool result, and 8 KiB of
-arguments is far more than eight declared tools can need.
+that buffer, and eight of them fit at once. Arguments at 8 KiB cost about
+16 KB, which is a 64th of the buffer.
 
 A result over the cap is your bug, not a transport problem. Send an id or a
 short summary and let the user open your app for the rest.
@@ -791,10 +828,10 @@ rejects a name your app does not declare, before any IPC. A typo then throws
 where you wrote it, instead of quietly never matching. Without it the names go
 to Ari, which validates them against your catalogue.
 
-The set is a subset of your catalogue, so it holds at most
-`AriToolsContract.MAX_TOOLS_PER_PROVIDER` names. Every name must match the
-same `^[a-z][a-z0-9_]{0,31}$` your declarations do. Both rules are checked
-before the call, and both throw `IllegalArgumentException`.
+The set is a subset of your catalogue, so it is as large as your catalogue
+allows. Every name must match the same `^[a-z][a-z0-9_]{0,31}$` your
+declarations do. That rule is checked before the call, and throws
+`IllegalArgumentException`.
 
 No permission is involved, and you pass no package name. Ari reads
 `Binder.getCallingUid()` to see who called, so a package name you sent would
@@ -891,9 +928,27 @@ applies to an older file.
 ### When each number changes
 
 Bump `DECLARATION_VERSION` only when a change makes an older Ari **misread** a
-declaration. That means a new `type` value, a changed field meaning, or a new
-required field. A new optional field that an older Ari ignores is not a bump,
-unless ignoring it changes how Ari dispatches the tool. Two worked cases:
+declaration: accept it and act on the wrong meaning. A changed field meaning or
+a new required field does that. So does a new optional field an older Ari
+ignores, when ignoring it changes how Ari dispatches the tool.
+
+A new `type` value does **not**, and this is the case to reason through rather
+than assume. `type` is a key an older Ari knows, holding a value it does not, so
+its decoder throws instead of guessing. Ari decodes tool by tool, so the throw
+drops the one tool that uses the new type and every other tool in the file still
+loads. Bumping would be worse than leaving the number alone: the version sits on
+the **file**, so an older Ari would refuse the whole provider — including every
+tool that uses no list, and including a partner who only rebuilt against a newer
+SDK. `int_list` and `string_list` were added without a bump for that reason.
+
+So a partner using a list argument on an older Ari sees that tool missing and
+this line in `logcat`, and their other tools working:
+
+```
+<package> tool 'remove_circles' dropped: arg 'numbers': unknown type 'int_list'
+```
+
+Two worked cases that **were** bumps:
 
 - An older Ari that cannot see `uri` would bind the provider instead of opening
   the link. That is a bump.
@@ -910,3 +965,30 @@ give the new capability an entry in
 
 Every value in `AriToolsContract` is public API. Changing one is a breaking
 change, so bump a version constant instead of redefining an existing value.
+
+### Changing the AIDL surface
+
+Every value in `AriToolsContract` is public API. Changing one is a breaking
+change, so add a new value instead of redefining an existing one.
+
+The order of the methods in an AIDL interface is part of the contract. Each
+method holds a transaction code taken from its position. Adding a method last
+keeps every existing code, so an older provider stays callable. Reordering or
+removing one moves every later method down a code, so an old caller reaches the
+wrong method.
+
+A method's parameter list is part of the contract too. Adding a parameter
+changes that method's parcel layout, so two sides built against different
+versions disagree on what the parcel holds. Add a new method instead.
+
+An incompatible change means a second interface next to the first one. Each
+side then picks the interface it speaks.
+
+A new optional method needs a capability name in `AriToolsContract`, and that
+name needs an entry in `CAPABILITY_SINCE_PROTOCOL_VERSION` holding the
+`PROTOCOL_VERSION` that added it. A mandatory method belongs to
+`MIN_SUPPORTED_PROTOCOL_VERSION` instead.
+
+`IAriToolCallback.onResult` carries a `PendingIntent` next to the JSON, not
+inside it. A `PendingIntent` is `Parcelable`, so JSON cannot hold it. The
+envelope's `kind` is what tells the reader to expect one.

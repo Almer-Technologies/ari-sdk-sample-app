@@ -38,16 +38,27 @@ private object UriPatterns {
 // are checked on a copy with every placeholder replaced by this.
 private const val PLACEHOLDER_STAND_IN = "x"
 
-// The declaration bounds what these types hold. Free text is the model's own, so a
-// tool names it in AriToolsContract.FIELD_FREE_TEXT_URI_ARGS to fill a placeholder.
-private fun AriToolArg.isConstrained(): Boolean = when (this) {
-    is AriToolArg.StringArg -> false
+// The declaration bounds what a CONSTRAINED type holds. FREE_TEXT is the model's own, so a
+// tool names it in AriToolsContract.FIELD_FREE_TEXT_URI_ARGS to fill a placeholder. NEVER
+// has no opt in: a set has no meaning as one uri component, and the SDK will not choose a
+// separator for the tool.
+private enum class PlaceholderFit { CONSTRAINED, FREE_TEXT, NEVER }
+
+private fun AriToolArg.placeholderFit(): PlaceholderFit = when (this) {
+    is AriToolArg.StringArg -> PlaceholderFit.FREE_TEXT
     is AriToolArg.IntArg,
     is AriToolArg.NumberArg,
     is AriToolArg.BoolArg,
     is AriToolArg.EnumArg,
-    -> true
+    -> PlaceholderFit.CONSTRAINED
+
+    is AriToolArg.IntListArg,
+    is AriToolArg.StringListArg,
+    -> PlaceholderFit.NEVER
 }
+
+private fun listPlaceholderRefusal(tool: String, name: String) =
+    "tool '$tool': arg '$name' is a list, so it cannot fill a uri placeholder"
 
 private fun placeholderNames(uri: String): Set<String> =
     UriPatterns.PLACEHOLDER.findAll(uri).map { match -> match.groupValues[1] }.toSet()
@@ -67,7 +78,11 @@ private fun requireFreeTextUriArgs(
         require(arg != null) {
             "tool '$tool': $key names '${name.take(MAX_ECHOED_LENGTH)}', which is not a declared arg"
         }
-        require(!arg.isConstrained()) { "tool '$tool': $key names '$name', which is not free text" }
+        val fit = arg.placeholderFit()
+        require(fit != PlaceholderFit.NEVER) { listPlaceholderRefusal(tool, name) }
+        require(fit == PlaceholderFit.FREE_TEXT) {
+            "tool '$tool': $key names '$name', which is not free text"
+        }
         require(name in filled) { "tool '$tool': $key names '$name', which the uri does not fill" }
     }
 }
@@ -93,7 +108,9 @@ private fun requireUriTemplate(
         require(arg != null) {
             "tool '$tool': uri names '${name.take(MAX_ECHOED_LENGTH)}', which is not a declared arg"
         }
-        require(arg.isConstrained() || name in freeTextUriArgs) {
+        val fit = arg.placeholderFit()
+        require(fit != PlaceholderFit.NEVER) { listPlaceholderRefusal(tool, name) }
+        require(fit == PlaceholderFit.CONSTRAINED || name in freeTextUriArgs) {
             "tool '$tool': arg '$name' is free text, so the tool must name it in " +
                 "${AriToolsContract.FIELD_FREE_TEXT_URI_ARGS} to fill a uri placeholder"
         }
@@ -108,13 +125,17 @@ private fun requireUriTemplate(
  *
  * @property confirm Whether Ari asks the user before it runs the tool. A partner writes its
  *   own declaration, so this guards the user only if the partner sets it honestly.
- * @property presentsUi Whether the tool opens a screen and returns no data.
+ * @property presentsUi Whether the tool opens a screen and returns no data. Ari strips this
+ *   key before it sends the declaration to the cloud, so it never reaches the model.
  * @property uri Deeplink template Ari opens instead of binding the provider, with one
  *   `{arg_name}` placeholder per value to fill. Ari opens it as `ACTION_VIEW` on the
- *   provider's package, and takes no action, component, extras or flags from here.
+ *   provider's package, and takes no action, component, extras or flags from here. Ari
+ *   strips this key before it sends the declaration to the cloud, so the link stays on
+ *   the device and the model only ever sees the tool's name, description and args.
  * @property freeTextUriArgs Names of args this tool lets fill a placeholder with free text.
  *   A partner writes its own declaration, so this only stops an accidental free-text
- *   deeplink and marks a deliberate one. A hostile partner can name any arg here.
+ *   deeplink and marks a deliberate one. A hostile partner can name any arg here. Ari
+ *   strips this key too, for the same reason it strips [uri].
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable

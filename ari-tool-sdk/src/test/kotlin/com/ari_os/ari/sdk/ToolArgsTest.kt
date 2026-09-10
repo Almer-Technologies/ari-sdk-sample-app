@@ -112,6 +112,114 @@ class ToolArgsTest {
     }
 
     @Test
+    fun `a list accessor reads its own element type`() {
+        val args = argsOf("""{"numbers":[3,1,2],"tags":["red","green"]}""")
+
+        assertEquals(listOf(3, 1, 2), args.intList("numbers"))
+        assertEquals(listOf("red", "green"), args.stringList("tags"))
+    }
+
+    @Test
+    fun `an element that holds a value of another type reads as that type`() {
+        val args = argsOf("""{"numbers":["3",1],"tags":[1,true]}""")
+
+        assertEquals(listOf(3, 1), args.intList("numbers"))
+        assertEquals(listOf("1", "true"), args.stringList("tags"))
+    }
+
+    @Test
+    fun `an empty list is empty, not missing and not null`() {
+        val args = argsOf("""{"numbers":[],"tags":[]}""")
+
+        assertTrue(args.has("numbers"))
+        assertEquals(emptyList<Int>(), args.intList("numbers"))
+        assertEquals(emptyList<String>(), args.stringListOrNull("tags"))
+    }
+
+    @Test
+    fun `an absent list is null and the strict accessor names it`() {
+        val args = argsOf("""{}""")
+
+        assertNull(args.intListOrNull("numbers"))
+        assertNull(args.stringListOrNull("tags"))
+
+        val failure = assertThrows(AriToolArgumentException::class.java) {
+            args.intList("numbers")
+        }
+
+        assertEquals("arg 'numbers' is missing", failure.message)
+    }
+
+    /** A shorter list would act on a set the user never confirmed. */
+    @Test
+    fun `one unreadable element voids the whole list`() {
+        val args = argsOf("""{"numbers":[1,"two",3],"tags":["red",{"a":1}]}""")
+
+        assertNull(args.intListOrNull("numbers"))
+        assertNull(args.stringListOrNull("tags"))
+    }
+
+    @Test
+    fun `a fraction in a list voids the list`() {
+        assertNull(argsOf("""{"numbers":[1,1.5]}""").intListOrNull("numbers"))
+    }
+
+    @Test
+    fun `a json null element voids the list`() {
+        assertNull(argsOf("""{"numbers":[1,null]}""").intListOrNull("numbers"))
+    }
+
+    @Test
+    fun `a scalar is not a one element list`() {
+        val args = argsOf("""{"numbers":5,"tags":"red"}""")
+
+        assertNull(args.intListOrNull("numbers"))
+        assertNull(args.stringListOrNull("tags"))
+
+        val failure = assertThrows(AriToolArgumentException::class.java) {
+            args.intList("numbers")
+        }
+
+        assertEquals("arg 'numbers' is not a list of ints", failure.message)
+    }
+
+    @Test
+    fun `an object is not a list`() {
+        assertNull(argsOf("""{"numbers":{"a":1}}""").intListOrNull("numbers"))
+    }
+
+    @Test
+    fun `a list at the cap is read and one element over it is refused`() {
+        val cap = AriToolsContract.MAX_LIST_ELEMENTS
+        val atCap = argsOf("""{"numbers":[${(1..cap).joinToString(",")}]}""")
+        val overCap = argsOf("""{"numbers":[${(1..cap + 1).joinToString(",")}]}""")
+
+        assertEquals(cap, atCap.intList("numbers").size)
+        assertNull(overCap.intListOrNull("numbers"))
+
+        val failure = assertThrows(AriToolArgumentException::class.java) {
+            overCap.intList("numbers")
+        }
+
+        assertEquals("arg 'numbers' is not a list of ints", failure.message)
+    }
+
+    @Test
+    fun `a text list over the cap is refused too`() {
+        val over = (1..AriToolsContract.MAX_LIST_ELEMENTS + 1).joinToString(",") { """"t$it"""" }
+
+        assertNull(argsOf("""{"tags":[$over]}""").stringListOrNull("tags"))
+    }
+
+    @Test
+    fun `a json null list is absent`() {
+        val args = argsOf("""{"numbers":null}""")
+
+        assertFalse(args.has("numbers"))
+        assertNull(args.intListOrNull("numbers"))
+    }
+
+    @Test
     fun `a strict accessor still throws an IllegalArgumentException`() {
         val args = argsOf("""{}""")
 

@@ -67,20 +67,15 @@ class AriToolsTest {
         assertEquals(AriAvailabilityResult.Accepted, result)
     }
 
+    /** Nothing caps how many tools a provider declares, so nothing caps the available set. */
     @Test
-    fun `a set over the tool cap fails at the call site`() {
-        val tooMany = (1..AriToolsContract.MAX_TOOLS_PER_PROVIDER + 1)
-            .map { index -> "tool_$index" }
-            .toSet()
+    fun `a large available set reaches Ari`() = runTest {
+        ariAnswers(replyOf(accepted = true))
+        val many = (1..64).map { index -> "tool_$index" }.toSet()
 
-        val failure = assertThrows(IllegalArgumentException::class.java) {
-            runTest { AriTools.setAvailable(context, tooMany) }
-        }
+        val result = AriTools.setAvailable(context, many)
 
-        assertEquals(
-            "at most 8 tools can be available, and this set holds 9",
-            failure.message,
-        )
+        assertEquals(AriAvailabilityResult.Accepted, result)
     }
 
     @Test
