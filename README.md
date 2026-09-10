@@ -1,13 +1,10 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes six capabilities to Ari. **It ships as two
-archives — `ari-tool-sample-<version>.zip` and `ari-tool-sdk-<version>.zip` —
-and it does not build until you have unpacked both.** Unpack the sample into an
-empty directory, then unpack the SDK archive inside it, next to `app/`. The SDK
-is the larger half by far, and separating it is what keeps the code you actually
-read down to a few hundred lines.
+A minimal Android app that exposes six capabilities to Ari. It ships as one
+archive, `ari-tool-sample-<version>.zip`: unpack it into an empty directory and
+it builds, because the SDK is in there as an AAR under `sdk-repo/`.
 
-Then install it, and say:
+Build it, install it, and say:
 
 > "Hey Ari, add a blue circle"
 
