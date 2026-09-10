@@ -21,9 +21,9 @@ import org.junit.Test
  * `invokeToolInTest` enters [AriToolService] through the same binder Ari calls,
  * so each of these covers the permission gate, the argument parsing, the handler
  * and the error envelope over one code path. The other test classes stop at the
- * declaration — [AriToolServiceTest] reads the registry, [AriToolsAssetTest]
- * compares it to the committed asset, [CircleDeeplinkTest] checks the manifest
- * against it — so none would notice `add_circle` returning the wrong number.
+ * declaration — [AriToolServiceTest] reads the registry and [CircleDeeplinkTest]
+ * checks the manifest against it — so neither would notice `add_circle`
+ * returning the wrong number.
  *
  * The `@OptIn` covers `Dispatchers.setMain`/`resetMain` and
  * `UnconfinedTestDispatcher`, all [ExperimentalCoroutinesApi], since this

@@ -1,16 +1,33 @@
-com.ari_os:ari-tool-sdk:0.1.0, built by :libs:ari-tool-sdk:publishToMavenLocal
-on JDK 21 from leviathan commit
+com.ari_os:ari-tool-sdk:0.1.0 and the Ari Gradle plugin it ships with —
+com.ari_os:ari-tool-gradle-plugin:0.1.0 plus the plugin marker
+com.ari_os.ari-tools:com.ari_os.ari-tools.gradle.plugin:0.1.0 — built by
+:libs:ari-tool-sdk:publishToMavenLocal and
+:libs:ari-tool-gradle-plugin:publishToMavenLocal on JDK 21 from leviathan commit
 
-    417ade70511bdad672d88dc35160831f66324347   (MOBILE-2340-ari-tool-sdk)
+    5f6cd8fd9476863bc602510c3512eb797af17ebe   (MOBILE-2340-ari-tool-sdk)
+
+The marker is the pom Gradle looks up for `id("com.ari_os.ari-tools")`; it
+carries no jar of its own and points at the implementation. All three move
+together — the plugin runs a generator the SDK ships, so a mismatched pair
+fails at build time.
 
 The SDK ships as a binary, so no SDK source belongs here. Do not copy the
-sources jar publishToMavenLocal also writes. LICENSE beside this file governs
-the .aar. To refresh, from a leviathan checkout at the commit you want:
+sources jar :libs:ari-tool-sdk:publishToMavenLocal also writes. The plugin
+publication writes no sources jar, so there is nothing to leave out of that
+one and nothing to strip from its metadata. LICENSE beside this file governs
+both artifacts. To refresh, from a leviathan checkout at the commit you want:
 
-    ./gradlew :libs:ari-tool-sdk:publishToMavenLocal
-    v=0.1.0; d=com/ari_os/ari-tool-sdk/$v
-    cp ~/.m2/repository/$d/ari-tool-sdk-$v.{aar,pom,module} sdk-repo/$d/
+    ./gradlew :libs:ari-tool-sdk:publishToMavenLocal \
+              :libs:ari-tool-gradle-plugin:publishToMavenLocal
+    v=0.1.0; m=~/.m2/repository/com/ari_os
+    d=com/ari_os/ari-tool-sdk/$v
+    p=com/ari_os/ari-tool-gradle-plugin/$v
+    g=com/ari_os/ari-tools/com.ari_os.ari-tools.gradle.plugin/$v
+    cp $m/ari-tool-sdk/$v/ari-tool-sdk-$v.{aar,pom,module} sdk-repo/$d/
+    cp $m/ari-tool-gradle-plugin/$v/ari-tool-gradle-plugin-$v.{jar,pom,module} sdk-repo/$p/
+    cp $m/ari-tools/com.ari_os.ari-tools.gradle.plugin/$v/*.pom sdk-repo/$g/
     ./scripts/strip-sources-variant.sh sdk-repo/$d/ari-tool-sdk-$v.module
 
-then update the commit above. A new version means a new directory here and the
-version in app/build.gradle.kts.
+then update the commit above. A new version means a new directory for each of
+the three, the version in the `id(...)` line of app/build.gradle.kts, and the
+version of the SDK dependency beside it.

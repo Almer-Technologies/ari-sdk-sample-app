@@ -1,5 +1,9 @@
 pluginManagement {
     repositories {
+        // The Ari Gradle plugin ships beside the SDK AAR in sdk-repo/, and
+        // pluginManagement resolves from its own list — so the folder is named
+        // again under dependencyResolutionManagement, and neither is redundant.
+        maven { url = uri(settingsDir.resolve("sdk-repo")) }
         google()
         mavenCentral()
         gradlePluginPortal()

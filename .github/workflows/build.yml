@@ -1,9 +1,10 @@
 # Builds the sample app and runs its unit tests.
 #
 # WHAT THIS CATCHES: a sample that no longer compiles against the SDK AAR, a
-# test that no longer passes, and a declaration asset someone edited by hand or
-# forgot to regenerate — because :app:testDebugUnitTest includes the drift check
-# that compares assets/ari_tools.json to AriToolService's registry.
+# test that no longer passes, and a tool declaration the build cannot produce —
+# the Ari Gradle plugin runs DemoTools in a plain JVM to write
+# assets/ari_tools.json, so a declaration that calls an Android framework method,
+# or grows past the 64 KB cap, fails :app:assembleDebug here.
 #
 # WHAT THIS DOES NOT CATCH: upstream SDK changes breaking a partner. The SDK is
 # consumed as a binary from sdk-repo/, the Maven repository committed in this
@@ -71,24 +72,41 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME"
           ./gradlew --version
 
-      # :app is the only module. Resolving the SDK from sdk-repo/ is part of
-      # what this proves: a run that could not find the AAR, or found it
-      # without its POM, fails here rather than at a partner's first launch.
+      # :app is the only module. Resolving the SDK *and the Gradle plugin* from
+      # sdk-repo/ is part of what this proves: a run that could not find the AAR,
+      # or found it without its POM, or could not resolve the plugin marker under
+      # pluginManagement, fails here rather than at a partner's first launch.
       - name: Build and test
         run: |
           ./gradlew --no-daemon --stacktrace \
             :app:assembleDebug \
             :app:testDebugUnitTest
 
-      # The asset is what Ari reads out of the installed APK, so prove it is in
-      # there and matches the committed source. The drift test already ties the
-      # source to the code; this ties the shipped bytes to the source.
+      # The committed asset is gone, so this diffs the shipped bytes against the
+      # plugin's own output instead. What it guards is the wiring: the plugin
+      # writes into build/, and only addGeneratedSourceDirectory puts that folder
+      # in front of mergeAssets. If the link broke, the build stays green and the
+      # APK ships no declaration at all — unzip fails here instead. Comparing
+      # bytes rather than a list of names keeps the tool names in one place.
       - name: Check the declaration ships inside the APK
         run: |
           unzip -p app/build/outputs/apk/debug/app-debug.apk \
             assets/ari_tools.json > /tmp/ari_tools_from_apk.json
-          diff app/src/main/assets/ari_tools.json /tmp/ari_tools_from_apk.json
-          echo "assets/ari_tools.json in the APK matches the committed declaration"
+          diff app/build/generated/assets/generateDebugAriTools/ari_tools.json \
+            /tmp/ari_tools_from_apk.json
+          echo "the APK ships the declaration the plugin generated"
+
+      # A separate check, because the diff above cannot see this one. Measured:
+      # with an asset committed at src/main/assets AND the plugin generating one,
+      # the generated copy wins the merge and the build stays green — so a stale
+      # committed file is invisible in the APK and simply misleads whoever reads
+      # the source tree. Nothing generates that path any more; nothing may.
+      - name: Check no declaration asset is committed
+        run: |
+          if git ls-files -- '**/assets/ari_tools.json' | grep -q .; then
+            echo "ari_tools.json is committed — the plugin generates it" >&2
+            exit 1
+          fi
 
       - name: Upload test reports
         if: failure()

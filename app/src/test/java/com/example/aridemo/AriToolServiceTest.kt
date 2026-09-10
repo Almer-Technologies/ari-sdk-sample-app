@@ -12,6 +12,10 @@ import org.junit.Test
  * the model exactly what `tools()` returns, so an empty registry is an app with
  * no tools rather than a broken one, and nothing else would fail.
  *
+ * Read through the service rather than off [DemoTools] on purpose. The build
+ * generates the asset from the object, so what is left to pin is the other half:
+ * that `tools()` hands Ari that same registry and not another one.
+ *
  * Only what is true of THIS app is asserted here. Every declaration-shape rule —
  * the name pattern, the description cap, a repeated tool name, a `tool()` with no
  * `handle { }`, a template that misses a required arg or fills a placeholder with

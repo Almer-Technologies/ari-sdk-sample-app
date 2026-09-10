@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.ari_os.ari-tools</groupId>
+  <artifactId>com.ari_os.ari-tools.gradle.plugin</artifactId>
+  <version>0.1.0</version>
+  <packaging>pom</packaging>
+  <name>Ari tool declarations</name>
+  <description>Generates assets/ari_tools.json from an app's Ari tool declarations.</description>
+  <licenses>
+    <license>
+      <name>RealWear Proprietary License</name>
+      <comments>Use is governed by the licensee's written agreement with RealWear, Inc.</comments>
+    </license>
+  </licenses>
+  <dependencies>
+    <dependency>
+      <groupId>com.ari_os</groupId>
+      <artifactId>ari-tool-gradle-plugin</artifactId>
+      <version>0.1.0</version>
+    </dependency>
+  </dependencies>
+</project>

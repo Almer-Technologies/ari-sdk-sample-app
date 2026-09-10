@@ -35,11 +35,20 @@ sample_zip="$dist/ari-tool-sample-$version.zip"
 rm -rf "$dist"
 mkdir -p "$dist"
 
-# The AAR is what the sample builds against, so an archive without it is not a
-# buildable project. Cheap to assert, and it catches a sdk-repo/ that was
-# emptied or never committed.
+# Read, not repeated: the same reason `version` above is read rather than typed.
+# A version bump touching this script would fail it on a path nobody changed.
+sdkver="$(sed -n 's/^ *id("com.ari_os.ari-tools") version "\(.*\)"/\1/p' app/build.gradle.kts)"
+[ -n "$sdkver" ] || { echo "no com.ari_os.ari-tools version in app/build.gradle.kts" >&2; exit 1; }
+
+# The AAR and the Gradle plugin are what the sample builds against, so an
+# archive missing either is not a buildable project — and the plugin needs its
+# marker pom too, which is what `id("com.ari_os.ari-tools")` resolves. Cheap to
+# assert, and it catches a sdk-repo/ that was emptied or never committed.
 git ls-files --error-unmatch \
-    sdk-repo/com/ari_os/ari-tool-sdk/0.1.0/ari-tool-sdk-0.1.0.aar >/dev/null
+    "sdk-repo/com/ari_os/ari-tool-sdk/$sdkver/ari-tool-sdk-$sdkver.aar" \
+    "sdk-repo/com/ari_os/ari-tool-gradle-plugin/$sdkver/ari-tool-gradle-plugin-$sdkver.jar" \
+    "sdk-repo/com/ari_os/ari-tools/com.ari_os.ari-tools.gradle.plugin/$sdkver/com.ari_os.ari-tools.gradle.plugin-$sdkver.pom" \
+    >/dev/null
 
 # The sources jar is the SDK source under another name and must never ship.
 if git ls-files -- 'sdk-repo/**-sources.jar' | grep -q .; then
