@@ -92,26 +92,6 @@
           "md5": "0e0f9c0b296f24a6ba694e282cf85480"
         }
       ]
-    },
-    {
-      "name": "releaseVariantReleaseSourcePublication",
-      "attributes": {
-        "org.gradle.category": "documentation",
-        "org.gradle.dependency.bundling": "external",
-        "org.gradle.docstype": "sources",
-        "org.gradle.usage": "java-runtime"
-      },
-      "files": [
-        {
-          "name": "ari-tool-sdk-0.1.0-sources.jar",
-          "url": "ari-tool-sdk-0.1.0-sources.jar",
-          "size": 28410,
-          "sha512": "fad2a2db4c422059cf89745872ab83ccb881392b163b6843f453a6936f59bd43358c6beca7fd0cb520632da2a1b46a450ccad02e0b0f1d3ea3a355da8db39238",
-          "sha256": "eaddbec80cf49d7b953946cadcbb0ce10acf80633eb50f9032c688276c466a67",
-          "sha1": "229d0cd563761705489bfa8d2153ac468c202e1b",
-          "md5": "a797b2bd2797eaec0fe09b014e379bd7"
-        }
-      ]
     }
   ]
 }

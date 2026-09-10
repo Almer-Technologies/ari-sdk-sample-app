@@ -1,19 +1,16 @@
-com.ari_os:ari-tool-sdk:0.1.0 was built from leviathan commit
+com.ari_os:ari-tool-sdk:0.1.0, built by :libs:ari-tool-sdk:publishToMavenLocal
+on JDK 21 from leviathan commit
 
-    417ade70511bdad672d88dc35160831f66324347   (branch MOBILE-2340-ari-tool-sdk)
+    417ade70511bdad672d88dc35160831f66324347   (MOBILE-2340-ari-tool-sdk)
 
-by that repo's :libs:ari-tool-sdk:publishToMavenLocal, run on JDK 21.
-
-The SDK ships as a binary. No SDK source belongs in this repo, so the
-sources jar publishToMavenLocal also writes is deliberately NOT copied
-here — do not add it. LICENSE beside this file governs the .aar; the
-POM names the same licence.
-
-To refresh, from a leviathan checkout at the commit you want:
+The SDK ships as a binary, so no SDK source belongs here. Do not copy the
+sources jar publishToMavenLocal also writes. LICENSE beside this file governs
+the .aar. To refresh, from a leviathan checkout at the commit you want:
 
     ./gradlew :libs:ari-tool-sdk:publishToMavenLocal
+    v=0.1.0; d=com/ari_os/ari-tool-sdk/$v
+    cp ~/.m2/repository/$d/ari-tool-sdk-$v.{aar,pom,module} sdk-repo/$d/
+    ./scripts/strip-sources-variant.sh sdk-repo/$d/ari-tool-sdk-$v.module
 
-then copy the .aar, the .pom and the .module (those three, nothing else)
-from ~/.m2/repository/com/ari_os/ari-tool-sdk/<version>/ into the matching
-directory here, and update the commit above. Bumping the version means a
-new directory plus the version in app/build.gradle.kts.
+then update the commit above. A new version means a new directory here and the
+version in app/build.gradle.kts.
