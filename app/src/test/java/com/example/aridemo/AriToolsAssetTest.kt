@@ -16,15 +16,11 @@ import java.io.File
  *   check only:  ./gradlew :app:testDebugUnitTest
  *
  * Without the flag it only reads, so a tool added in code and forgotten in the
- * asset fails the build here instead of quietly never reaching Ari. With the
- * flag it rewrites the file from the registry and then checks what it wrote.
+ * asset fails the build here instead of quietly never reaching Ari.
  *
- * It is deliberately one test method. The write is a side effect on a source
- * file, so a second method asserting on that file would depend on JUnit's
- * method order, which is unspecified.
- *
- * Building the service runs no handler, so no Android context is involved —
- * `testOptions { unitTests.isReturnDefaultValues = true }` is all it needs.
+ * One test method on purpose: the write is a side effect on a source file, so a
+ * second method asserting on that file would depend on JUnit's method order,
+ * which is unspecified.
  */
 class AriToolsAssetTest {
 
@@ -37,8 +33,7 @@ class AriToolsAssetTest {
             assertEquals(AriToolsContract.DECLARATION_ASSET, written.name)
         }
 
-        // Reports "The file is missing." when there is nothing there, and names
-        // the first line that differs otherwise.
+        // Names the first line that differs, or reports the file as missing.
         AriToolsAsset.requireMatches(ASSETS_DIR, registry)
 
         val asset = File(ASSETS_DIR, AriToolsContract.DECLARATION_ASSET)

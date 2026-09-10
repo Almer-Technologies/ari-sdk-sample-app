@@ -19,33 +19,20 @@ import org.junit.Test
  * Every tool this app declares, run end to end.
  *
  * `invokeToolInTest` enters [AriToolService] through the same binder Ari calls,
- * so each of these covers the permission gate, the argument parsing, the
- * handler and the error envelope over one code path. There is no second path a
- * test could prove instead: what passes here is what a real invocation does.
+ * so each of these covers the permission gate, the argument parsing, the handler
+ * and the error envelope over one code path. The other test classes stop at the
+ * declaration — [AriToolServiceTest] reads the registry, [AriToolsAssetTest]
+ * compares it to the committed asset, [CircleDeeplinkTest] checks the manifest
+ * against it — so none would notice `add_circle` returning the wrong number.
  *
- * The other test classes stop at the declaration — [AriToolServiceTest] reads
- * the registry, [AriToolsAssetTest] compares it to the committed asset, and
- * [CircleDeeplinkTest] checks the manifest against it. None reaches a handler,
- * so none would notice `add_circle` returning the wrong number.
- *
- * `show_circle` is the exception: it is a deeplink, so it has no handler to run
- * and the only thing to prove here is that the service refuses to run it.
- *
- * The `@OptIn` is needed because `Dispatchers.setMain`,
- * `UnconfinedTestDispatcher` and `Dispatchers.resetMain` are all marked
- * [ExperimentalCoroutinesApi] and this project sets no opt-in compiler flag.
- * Leaving it off is three warnings rather than a failed build, so it is hygiene
- * — but leviathan opts in globally and a partner project does not, which is why
- * the SDK's README shows the annotation.
+ * The `@OptIn` covers `Dispatchers.setMain`/`resetMain` and
+ * `UnconfinedTestDispatcher`, all [ExperimentalCoroutinesApi], since this
+ * project sets no global opt-in flag the way leviathan does.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AriToolHandlerTest {
 
-    /**
-     * Each handler runs on the main dispatcher, which a JVM test has to supply.
-     * `Unconfined` runs it on the calling thread, so the result is there by the
-     * time `invokeToolInTest` returns.
-     */
+    /** Handlers run on the main dispatcher; `Unconfined` runs them inline. */
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -74,10 +61,7 @@ class AriToolHandlerTest {
         assertEquals(CircleState.DEFAULT_COLOR, payload.string("color"))
     }
 
-    /**
-     * A full screen is a refusal, not a crash, and `unavailable` is the code
-     * that tells Ari a retry can work once the user removes one.
-     */
+    /** `unavailable` is the code that tells Ari a retry works once one is removed. */
     @Test
     fun `add_circle past the limit reports unavailable`() {
         repeat(CircleState.MAX_CIRCLES - 1) { invoke("add_circle") }
@@ -89,9 +73,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * The property the whole sample is built around: removing a circle leaves a
-     * gap rather than renumbering, so a batch of removals from one
-     * `list_circles` cannot hit the wrong circle.
+     * The property the whole sample is built around: a removal leaves a gap rather
+     * than renumbering, so a batch of removals cannot hit the wrong circle.
      */
     @Test
     fun `remove_circle leaves the other numbers where they were`() {
@@ -106,9 +89,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * `number` is declared required, so the handler reads it with the strict
-     * accessor and the SDK turns a missing value into the coded envelope that
-     * lets Ari ask the model again. The app writes no message for this.
+     * `number` is required, so the SDK turns a missing value into the coded
+     * envelope that lets Ari ask the model again. The app writes no message.
      */
     @Test
     fun `remove_circle without its required argument names the argument`() {
@@ -128,9 +110,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * The call the tool exists for: one invocation, one result, whatever the
-     * match count. Two green circles go and the red one stays, and `total` is
-     * what is left rather than what went.
+     * One invocation, one result, whatever the match count. `total` is what is
+     * left rather than what went.
      */
     @Test
     fun `remove_circles_by_color removes every circle of that colour in one call`() {
@@ -147,10 +128,9 @@ class AriToolHandlerTest {
     }
 
     /**
-     * No circle of that colour is a successful call that removed nothing, not a
-     * failure: there is nothing for Ari to recover from and nothing to ask the
-     * model to fix. `removed` 0 is the whole signal, which is why the tool's
-     * description tells the model what 0 means.
+     * A call that removed nothing is a success, not a failure: nothing for Ari to
+     * recover from. `removed` 0 is the whole signal, which is why the description
+     * tells the model what 0 means.
      */
     @Test
     fun `remove_circles_by_color removes nothing when no circle has that colour`() {
@@ -165,11 +145,9 @@ class AriToolHandlerTest {
     }
 
     /**
-     * `grey` and `gray` are two names for one colour in the palette, so the user
-     * saying either has to reach the same circles. Matching on the stored name
-     * instead of the resolved colour would pass every other test here and fail
-     * this one, and on a headset it would look like the tool ignoring a circle
-     * that is plainly grey.
+     * `grey` and `gray` are two names for one colour, so either has to reach the
+     * same circles. Matching on the stored name passes every other test here and
+     * fails this one.
      */
     @Test
     fun `remove_circles_by_color matches the colour, not the name it was added under`() {
@@ -182,9 +160,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * `color` is declared required and has no sensible default — a bulk removal
-     * that guessed a colour would delete circles nobody named — so the strict
-     * accessor is right and the SDK writes the message.
+     * `color` is required and has no sensible default: a bulk removal that guessed
+     * would delete circles nobody named.
      */
     @Test
     fun `remove_circles_by_color without its required colour names the argument`() {
@@ -195,10 +172,9 @@ class AriToolHandlerTest {
     }
 
     /**
-     * Same backstop as `set_circle_color`'s, over a second handler. The enum
-     * constrains the model and not the wire, and this tool deletes rather than
-     * recolours, so a colour it cannot resolve must refuse instead of matching
-     * nothing and reporting a clean 0.
+     * The enum constrains the model, not the wire, and this tool deletes, so an
+     * unresolvable colour must refuse rather than match nothing and report a
+     * clean 0.
      */
     @Test
     fun `remove_circles_by_color refuses a colour outside the declared list`() {
@@ -226,10 +202,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * The declaration constrains the model, not the wire. Nothing in the SDK
-     * checks a value against an `enum` arg's `values`, so `unknownColor` in
-     * [AriToolService] is the backstop that answers an off-list colour — and it
-     * is reachable, which is why it is still there.
+     * Nothing in the SDK checks a value against an `enum` arg's `values`, so
+     * `unknownColor` in [AriToolService] is a reachable backstop, not dead code.
      */
     @Test
     fun `a colour outside the declared list is the app's own refusal`() {
@@ -240,11 +214,9 @@ class AriToolHandlerTest {
     }
 
     /**
-     * How Ari answers "what's on screen?" — it keys the colours by number.
-     *
-     * `circles` is a nested object, and `ToolArgs` reads flat values only: an
-     * object is never text, so `payload.string("circles")` throws. Read a
-     * nested payload through `org.json` instead, off `payload.toString()`.
+     * `ToolArgs` reads flat values only, so `payload.string("circles")` throws on
+     * the nested object. Read a nested payload through `org.json`, off
+     * `payload.toString()`.
      */
     @Test
     fun `list_circles reports every circle keyed by its permanent number`() {
@@ -260,8 +232,8 @@ class AriToolHandlerTest {
     }
 
     /**
-     * A name this app never declared. The SDK answers it from the registry, so
-     * a stale tool in Ari's view cannot reach a handler that no longer exists.
+     * The SDK answers from the registry, so a stale tool in Ari's view cannot
+     * reach a handler that no longer exists.
      */
     @Test
     fun `a tool this app never declared reports unknown_tool`() {
@@ -271,13 +243,9 @@ class AriToolHandlerTest {
     }
 
     /**
-     * `show_circle` is declared with a `uri` and no handler, so Ari is meant to
-     * open the link rather than bind this service. Invoking it is Ari's mistake,
-     * not the model's, and the SDK says so rather than reporting a missing tool
-     * — `show_circle` exists, it just runs no code here.
-     *
-     * This is the whole of what a JVM test can say about the deeplink path
-     * through the service: the screen it actually opens needs a device.
+     * Invoking a deeplink tool is Ari's mistake, not the model's, so the SDK says
+     * `app_error` rather than reporting a missing tool. This is all a JVM test can
+     * say about the deeplink path — the screen it opens needs a device.
      */
     @Test
     fun `invoking the deeplink tool reports app_error rather than running anything`() {

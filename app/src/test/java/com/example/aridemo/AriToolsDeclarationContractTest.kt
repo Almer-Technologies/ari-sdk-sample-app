@@ -12,20 +12,14 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Checks the generated declaration against the real constants in
- * [AriToolsContract], not against what an earlier hand-written asset happened
- * to contain.
- *
- * [AriToolsAssetTest] proves the committed file matches the code. This proves
- * the file the code produces is one the current contract accepts: every cap,
- * the name pattern, the declaration and protocol versions, the capability set,
- * and the shape of every argument.
+ * [AriToolsAssetTest] proves the committed file matches the code. This proves the
+ * file the code produces is one the current [AriToolsContract] accepts: every
+ * cap, the name pattern, both versions, the capability set, and every arg shape.
  *
  * The file is read twice on purpose. Once through
- * [AriToolDeclarationFile.serializer()], which is the type the Ari host decodes
- * the asset with, so a key the host cannot read fails here. Once as raw JSON,
- * so the assertions are about the bytes on disk rather than about the writer's
- * own round-trip.
+ * [AriToolDeclarationFile.serializer()], the type the Ari host decodes the asset
+ * with, so a key the host cannot read fails here. Once as raw JSON, so the
+ * assertions are about the bytes on disk and not the writer's own round-trip.
  */
 class AriToolsDeclarationContractTest {
 
@@ -143,10 +137,7 @@ class AriToolsDeclarationContractTest {
         }
     }
 
-    /**
-     * The cloud pins the five arg keys and rejects any other, and only an enum
-     * carries `values`. Read straight off the bytes, per arg.
-     */
+    /** The cloud pins these five keys and rejects any other. Read off the bytes. */
     @Test
     fun `every arg on disk has the flat shape the cloud accepts`() {
         val tools = raw.getJSONArray("tools")
@@ -186,10 +177,9 @@ class AriToolsDeclarationContractTest {
     }
 
     /**
-     * The tool-level keys, pinned the way the arg keys above are. `uri` and
-     * `presentsUi` are the newest of them and the reason this exists: a deeplink
-     * tool is the only thing in this app that writes either, and a stray
-     * tool-level key would otherwise reach the host unchecked.
+     * The tool-level keys, pinned the way the arg keys are. `uri` and `presentsUi`
+     * are the newest, and a deeplink tool is the only thing here that writes
+     * either.
      */
     @Test
     fun `every tool on disk has only the keys the host reads`() {
@@ -204,10 +194,7 @@ class AriToolsDeclarationContractTest {
         }
     }
 
-    /**
-     * A uri tool opens a screen and returns no data, so the two keys travel
-     * together — Ari drops a tool that claims one without the other.
-     */
+    /** Ari drops a tool that claims one of these two keys without the other. */
     @Test
     fun `the one uri on disk comes with presentsUi, and nothing else sets either`() {
         val tools = raw.getJSONArray("tools")

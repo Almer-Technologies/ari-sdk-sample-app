@@ -13,12 +13,10 @@ import org.junit.Test
  * the model exactly what `tools()` returns, so an empty registry is an app with
  * no tools rather than a broken one, and nothing else would fail.
  *
- * Constructing the registry is itself a check. `ariTools { }` rejects a `tool()`
- * with no `handle { }` block, a repeated name, a name outside the contract's
- * pattern, a description over the cap and a ninth tool. It also rejects a
- * `deeplink()` whose template names an arg the tool does not declare, leaves out
- * a required one, or fills a placeholder with free text. So these assertions run
- * only if every one of those already held.
+ * Constructing the registry is itself a check — `ariTools { }` rejects a `tool()`
+ * with no `handle { }`, a repeated or malformed name, an over-long description, a
+ * ninth tool, and a `deeplink()` whose template misses a required arg or fills a
+ * placeholder with free text — so these assertions run only if all of that held.
  */
 class AriToolServiceTest {
 
@@ -40,17 +38,13 @@ class AriToolServiceTest {
     }
 
     /**
-     * The pair the whole bulk-removal change rests on, and the only part of it a
-     * JVM test can reach. Whether the model picks the right one of the two needs
-     * a voice turn on a headset; what a test can hold is that each description
-     * still names the other tool, so neither can be reworded into claiming the
-     * other's case without something going red.
+     * Whether the model picks the right one of the two needs a headset; what a
+     * test can hold is that each description still names the other, so neither can
+     * be reworded into claiming the other's case.
      *
-     * Deliberately structural rather than phrase-matching: rewording a
-     * description is normal and should not fail a test, dropping the pointer to
-     * the sibling is the regression. The one phrase pinned is the zero case,
-     * because a successful call that removed nothing is the thing Ari will
-     * otherwise narrate as a removal.
+     * Structural rather than phrase-matching on purpose — rewording is normal,
+     * dropping the pointer is the regression. The one phrase pinned is the zero
+     * case, which Ari would otherwise narrate as a removal.
      */
     @Test
     fun `each removal tool's description points at the other, and names the zero case`() {
@@ -63,10 +57,8 @@ class AriToolServiceTest {
     }
 
     /**
-     * The two kinds of tool, told apart by the one field that decides which path
-     * Ari takes. A `uri` means Ari opens the link itself; anything else means it
-     * binds this service. Getting that wrong on a tool does not fail anywhere at
-     * runtime — Ari simply takes the other path.
+     * `uri` is the one field that decides which path Ari takes, and getting it
+     * wrong fails nowhere at runtime — Ari simply takes the other path.
      */
     @Test
     fun `only show_circle is a deeplink, and the rest are invoked`() {
@@ -95,10 +87,9 @@ class AriToolServiceTest {
     }
 
     /**
-     * The rule the SDK enforces as the registry is built, pinned here so it is
-     * visible in this app rather than only upstream: Ari substitutes the value
-     * into a uri another component then handles, so a free-text `string` cannot
-     * fill a placeholder. `number` is an `int`, which can.
+     * The SDK enforces this as the registry is built; pinned here so the rule is
+     * visible in this app. A free-text `string` cannot fill a placeholder,
+     * because the value goes into a uri another component then handles.
      */
     @Test
     fun `every placeholder in the deeplink names a constrained arg of that tool`() {
@@ -143,13 +134,11 @@ class AriToolServiceTest {
     }
 
     /**
-     * The cloud reads `confirm`, so this pins behaviour the user feels: these
-     * two tools prompt and the other four do not. Both halves matter. A flag
-     * added to a harmless tool trains the user to wave prompts through, and a
-     * flag dropped from a removal takes the prompt away silently — `false` is
-     * the default, so that particular regression looks like nothing at all in a
-     * diff. Asserting the whole set, rather than that each removal has it, is
-     * what catches the second one.
+     * The cloud reads `confirm`, so this pins behaviour the user feels. Both
+     * halves matter: a flag added to a harmless tool trains the user to wave
+     * prompts through, and one dropped from a removal takes the prompt away
+     * silently, since `false` is the default. Asserting the whole set — rather
+     * than that each removal has it — is what catches the second.
      */
     @Test
     fun `the two removal tools are the only ones that declare confirm`() {
@@ -160,10 +149,10 @@ class AriToolServiceTest {
     }
 
     /**
-     * The point of declaring in code: every `color` arg takes its allowed values
-     * from the palette that resolves them, so no two of them can disagree. The
-     * count is asserted rather than inferred — a third tool taking a colour is
-     * exactly the change that could add a hand-written list beside this one.
+     * The point of declaring in code: every `color` arg takes its values from the
+     * palette that resolves them. The count is asserted rather than inferred,
+     * because a fourth tool taking a colour is the change that could bring a
+     * hand-written list with it.
      */
     @Test
     fun `every color arg offers exactly the palette CircleState resolves`() {

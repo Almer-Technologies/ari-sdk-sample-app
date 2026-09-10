@@ -9,21 +9,15 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * The circles on screen, shared between [MainActivity] and [AriToolService].
  *
- * **Numbers are stable for the life of a circle.** Circle 3 stays circle 3 until
- * it is removed, and removing it leaves a gap — the remaining circles keep their
- * numbers rather than shifting down.
- *
- * That matters more than it looks. "Remove the purple ones" is one call to
- * `remove_circles_by_color` now, but a batch of `remove_circle` calls has not
- * gone away — the model still issues one per circle when the user names two of
- * them, and it issues them in parallel, often *before* the first result comes
- * back. With positional numbering, every removal after the first would target a
- * number that had already shifted, and the wrong circle would go. Stable
- * numbers make a batch of removals safe by construction.
+ * **Numbers are stable for the life of a circle.** Removing circle 3 leaves a
+ * gap; the rest keep their numbers. That is what makes a batch of removals safe:
+ * the model issues one `remove_circle` per circle in parallel, often before the
+ * first result comes back, so positional numbering would send every removal
+ * after the first at the wrong circle.
  *
  * Process-wide singleton because the tool service and the UI are separate
- * components in the same process. A production app would hold this in a
- * repository injected into both, and persist it — see the README.
+ * components in the same process. A production app would inject a repository
+ * into both and persist it — see the README.
  */
 object CircleState {
 
@@ -34,22 +28,13 @@ object CircleState {
     const val DEFAULT_COLOR = "red"
 
     /**
-     * Colours Ari may pick.
+     * Colours Ari may pick, and the one source for both halves of that:
+     * [supportedNames] feeds the `values` of every `color` arg in
+     * `AriToolService`'s declaration, and this same map resolves the name Ari
+     * sends back. Insertion order keeps the generated asset stable.
      *
-     * This map is the single source of both halves that used to be kept in step
-     * by hand. [supportedNames] feeds the `values` of EVERY `color` arg in
-     * `AriToolService`'s declaration, and the same map resolves the name Ari
-     * sends back. Adding an entry here therefore reaches the model as soon as
-     * the declaration asset is regenerated, and a colour can no longer be
-     * offered but unresolvable, or resolvable but unreachable.
-     *
-     * Iteration order is insertion order, so the generated asset is stable.
-     *
-     * `grey` and `gray` both map to the same colour on purpose: speech-to-text
-     * will produce either, and the model can only pick from this list. That is
-     * also why [removeByColor] matches on the colour a name resolves to rather
-     * than on the name itself — otherwise the two would reach different
-     * circles.
+     * `grey` and `gray` map to one colour on purpose — speech-to-text produces
+     * either — which is why [removeByColor] matches on the resolved colour.
      */
     private val NAMED = mapOf(
         "red" to Color.Red,
@@ -76,40 +61,27 @@ object CircleState {
     /** Circles in display order. Numbers are stable and may have gaps. */
     val circles: StateFlow<List<Circle>> = _circles
 
-    /** How many circles are on screen. */
     val count: Int get() = _circles.value.size
 
     /** The numbers currently in use, in display order — for error messages. */
     fun activeNumbers(): List<Int> = _circles.value.map { it.number }
 
-    /**
-     * Colour names this app accepts, in declaration order.
-     *
-     * Read twice: once by `AriToolService` as the `values` of each `color`
-     * enum arg, and once for error messages.
-     */
+    /** Colour names this app accepts, in declaration order. */
     fun supportedNames(): List<String> = NAMED.keys.toList()
 
-    /** Resolve a declared colour name, or `null` if it isn't one we know. */
     fun colorOf(name: String): Color? = NAMED[name.lowercase().trim()]
 
     /**
-     * Black or white, whichever stays readable on [background].
-     *
-     * Needed once the palette includes white and yellow: the circle's number is
-     * drawn on top of it, and a fixed white would disappear on both.
+     * Black or white, whichever stays readable on [background]. The palette
+     * includes white and yellow, on which a fixed white number would disappear.
      */
     fun contrastingTextColor(background: Color): Color =
         if (background.luminance() > 0.5f) Color.Black else Color.White
 
     /**
-     * Back to the one red circle a fresh process starts with.
-     *
-     * This exists because the state is a process-wide singleton and JUnit runs
-     * every test in one process, so without it the first test's circles would
-     * decide what the second test sees. A production app holding this in a
-     * repository injected into the service and the UI would get a fresh
-     * instance per test and need nothing like this — see the README.
+     * Back to the one red circle a fresh process starts with. Exists only because
+     * this state is a singleton and JUnit runs every test in one process; an
+     * injected repository would get a fresh instance per test.
      */
     fun reset() {
         nextNumber.set(2)
@@ -119,9 +91,7 @@ object CircleState {
     /**
      * Append a circle with a fresh, never-reused number.
      *
-     * @param colorName Colour for the new circle; must be a known name.
-     * @return The number assigned to it, or `null` when already at
-     *   [MAX_CIRCLES].
+     * @return The number assigned to it, or `null` when already at [MAX_CIRCLES].
      */
     fun add(colorName: String): Int? {
         if (count >= MAX_CIRCLES) return null
@@ -133,7 +103,6 @@ object CircleState {
     /**
      * Remove one circle by number. Remaining circles keep their numbers.
      *
-     * @param number The circle's stable number.
      * @return `true` when removed, `false` when there is no such circle.
      */
     fun remove(number: Int): Boolean {
@@ -144,21 +113,11 @@ object CircleState {
     }
 
     /**
-     * Remove every circle of one colour. Remaining circles keep their numbers.
+     * Remove every circle of one colour, matched on the colour a name **resolves
+     * to** rather than the name it was added under — see [NAMED].
      *
-     * Circles are matched on the colour a name **resolves to**, not on the name
-     * they were added under. [NAMED] holds two names for one colour — `grey`
-     * and `gray` — so matching on the stored name would leave a circle added as
-     * `grey` untouched by "remove the gray ones", and neither the user nor the
-     * model can hear which of the two the other used.
-     *
-     * Shaped like [setColor]: a count, or `null` for an argument this app cannot
-     * make sense of.
-     *
-     * @param colorName Colour to remove; must be a known name.
-     * @return How many circles were removed, or `null` when [colorName] is not
-     *   one this app knows. Zero means no circle had that colour, which is a
-     *   removal of nothing rather than a failure.
+     * @return How many circles were removed, or `null` when [colorName] is not a
+     *   name this app knows. Zero is a removal of nothing, not a failure.
      */
     fun removeByColor(colorName: String): Int? {
         val target = colorOf(colorName) ?: return null
@@ -169,10 +128,8 @@ object CircleState {
     }
 
     /**
-     * Recolour one circle, or every circle.
+     * Recolour one circle, or every circle when [number] is null.
      *
-     * @param colorName Colour to apply; must be a known name.
-     * @param number The circle's stable number, or `null` for all of them.
      * @return How many circles changed, or `null` when [number] names a circle
      *   that does not exist.
      */

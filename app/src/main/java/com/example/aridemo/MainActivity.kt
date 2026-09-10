@@ -31,12 +31,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
- * What this app can do, as spoken phrases.
- *
- * Deliberately a static list, always on screen: a demo viewer should be able to
- * see what to say without being coached. Each entry is a phrase that really
- * works — keep it in step with the tools [AriToolService] declares, since that
- * registry is what Ari exposes to the model.
+ * What this app can do, as spoken phrases. Always on screen so a demo viewer can
+ * see what to say without being coached, so keep it in step with the tools
+ * [AriToolService] declares — that registry is what Ari exposes to the model.
  */
 private val VOICE_COMMANDS = listOf(
     "add a blue circle" to "adds one with a new number",
@@ -51,22 +48,16 @@ private val VOICE_COMMANDS = listOf(
 /**
  * The screen, and the target of the `show_circle` deeplink.
  *
- * The deeplink half is what makes this class part of the Ari integration.
  * `show_circle` is declared with a `uri` and no handler, so Ari never binds
- * [AriToolService] for it — it fills `aridemo://circle/{number}` and fires it as
- * `ACTION_VIEW`, the manifest filter routes it here, and this is the code that
- * answers. A partner whose tools are all deeplinks writes no service at all.
+ * [AriToolService] for it — it fills `aridemo://circle/{number}`, fires it as
+ * `ACTION_VIEW`, and the manifest filter routes it here. A partner whose tools
+ * are all deeplinks writes no service at all.
  */
 class MainActivity : ComponentActivity() {
 
     /**
-     * The circle the last deeplink asked for, or null when the app was opened
-     * from the launcher.
-     *
-     * A number here is not a circle that exists. Ari's placeholder rule bounds
-     * the value to a whole number and stops there, so the screen looks it up and
-     * says so when it names nothing — the same thing a handler would have to do
-     * with an argument.
+     * The circle the last deeplink asked for, or null when the app was opened from
+     * the launcher. Not a circle that exists — the screen still looks it up.
      */
     private var requestedCircle by mutableStateOf<Int?>(null)
 
@@ -83,9 +74,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Where a second "show me circle 4" arrives. The activity is `singleTask`,
-     * so Ari's link reaches the instance already on screen instead of stacking
-     * another one behind it, and [onCreate] does not run again.
+     * Where a second "show me circle 4" arrives. The activity is `singleTask`, so
+     * Ari's link reaches the instance already on screen and [onCreate] does not
+     * run again.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -106,9 +97,7 @@ private fun CirclesScreen(requestedCircle: Int?) {
         verticalArrangement = Arrangement.Center,
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // The number shown IS the number to say, and it never changes for
-            // the life of the circle — so removals leave gaps rather than
-            // shifting everything, and a batch of removals stays correct.
+            // The number shown is the number to say, for the life of the circle.
             circles.forEach { circle ->
                 NumberedCircle(
                     number = circle.number,
@@ -138,11 +127,9 @@ private fun CirclesScreen(requestedCircle: Int?) {
 }
 
 /**
- * What the `show_circle` deeplink is visibly for.
- *
- * Ari opened this app with no code of ours running first, so this line is the
- * whole proof the link arrived — and it says which number, because a number
- * Ari's rule allowed is still one this app has to check.
+ * Proof the deeplink arrived: Ari opened this app with none of our code running
+ * first. Says which number, because a number Ari's rule allowed is still one
+ * this app has to check.
  */
 @Composable
 private fun DeeplinkBanner(number: Int, exists: Boolean, modifier: Modifier = Modifier) {
@@ -161,7 +148,6 @@ private fun DeeplinkBanner(number: Int, exists: Boolean, modifier: Modifier = Mo
     )
 }
 
-/** The always-visible list of what you can say. Never changes. */
 @Composable
 private fun VoiceCommandHelp(modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
@@ -195,10 +181,8 @@ private fun NumberedCircle(number: Int, colorName: String, highlighted: Boolean)
             .size(64.dp)
             .clip(CircleShape)
             .background(fill)
-            // The palette includes white, which would otherwise be invisible
-            // against the surface. Outline every circle so the shape reads
-            // regardless of fill. A thick accent ring is what `show_circle`
-            // draws, and it has to survive every fill for the same reason.
+            // The palette includes white, invisible against the surface, so every
+            // circle is outlined; `show_circle`'s highlight is the same ring, thicker.
             .border(
                 width = if (highlighted) 6.dp else 2.dp,
                 color = when {

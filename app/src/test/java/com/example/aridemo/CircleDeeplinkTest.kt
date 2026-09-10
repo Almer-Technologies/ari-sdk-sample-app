@@ -18,17 +18,15 @@ private fun Element.elements(tag: String): List<Element> =
 /**
  * The `show_circle` deeplink, checked across all three places it is written.
  *
- * A deeplink tool is the one kind Ari runs without this app's code, so nothing
- * at runtime reports it broken: Ari fills the template, fires `ACTION_VIEW`,
- * and if the `<intent-filter>` does not match, Android drops the intent and the
- * user sees nothing happen. There is no error and no log in this app. So the
- * agreement between the declared template, the parser and the manifest has to
- * be checked here, at build time, or not at all.
+ * A deeplink is the one kind of tool Ari runs without this app's code, so nothing
+ * at runtime reports it broken: if the `<intent-filter>` does not match, Android
+ * drops the intent and the user sees nothing happen — no error, no log. So the
+ * agreement between the declared template, the parser and the manifest is checked
+ * here, at build time, or not at all.
  *
- * The manifest is parsed off disk with the JDK's own XML reader — the file the
- * build merges, not a runtime lookup, which a JVM unit test cannot do. So this
- * proves the filter is **declared** to match the template. It does not prove
- * Android resolves it, which needs a device; see "Not verified on hardware".
+ * The manifest is parsed off disk with the JDK's XML reader, so this proves the
+ * filter is **declared** to match. It does not prove Android resolves it, which
+ * needs a device; see "Not verified on hardware".
  */
 class CircleDeeplinkTest {
 
@@ -57,9 +55,8 @@ class CircleDeeplinkTest {
     }
 
     /**
-     * Ari's type rule stops the model writing free text into the placeholder, so
-     * this is a backstop rather than the main defence. It is here because the
-     * app is the party that has to hold when something else sends the link.
+     * Ari's type rule already stops the model writing free text into the
+     * placeholder; this holds when something else sends the link.
      */
     @Test
     fun `a link whose number is not a number is refused`() {
@@ -92,7 +89,7 @@ class CircleDeeplinkTest {
 
     /**
      * `startActivity` adds `CATEGORY_DEFAULT`, so a filter without it never
-     * matches the intent Ari sends. It is the single easiest thing to leave out.
+     * matches the intent Ari sends.
      */
     @Test
     fun `the filter declares the default category an implicit intent needs`() {
@@ -103,9 +100,9 @@ class CircleDeeplinkTest {
     }
 
     /**
-     * Deliberately absent. Ari sends `ACTION_VIEW` with this app's package set,
-     * which needs no `BROWSABLE`; adding it would additionally let any web page
-     * fire `aridemo://circle/3` at this app. Pinned so it is not added by habit.
+     * Deliberately absent, and pinned so it is not added by habit. Ari sets this
+     * app's package on the intent, so `BROWSABLE` buys nothing and would let any
+     * web page fire `aridemo://circle/3` at this app.
      */
     @Test
     fun `the filter is not browsable`() {
@@ -143,9 +140,8 @@ class CircleDeeplinkTest {
         const val HOST_ATTR = "android:host"
 
         /**
-         * Namespaces are left off on purpose, so an attribute is read as the
-         * literal `android:scheme` the file is written with. Turning them on
-         * would mean resolving the AOSP namespace URI for no gain here.
+         * Namespace-unaware on purpose, so an attribute is read as the literal
+         * `android:scheme` the file is written with.
          */
         val MANIFEST: Element = DocumentBuilderFactory.newInstance()
             .newDocumentBuilder()
