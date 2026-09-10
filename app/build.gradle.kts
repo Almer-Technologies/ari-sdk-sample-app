@@ -93,9 +93,4 @@ dependencies {
     // main dispatcher. A JVM test has to supply one, so it needs setMain and a
     // test dispatcher. Version pinned to the SDK's own coroutines version.
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
-
-    // AriToolDeclarationFile is the type the Ari host decodes the asset with,
-    // and the SDK holds kotlinx.serialization as `implementation`, so the
-    // round-trip check needs its own copy on the test classpath only.
-    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 }

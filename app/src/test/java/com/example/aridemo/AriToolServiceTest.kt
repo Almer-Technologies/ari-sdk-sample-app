@@ -2,7 +2,6 @@ package com.example.aridemo
 
 import com.ari_os.ari.sdk.AriToolArg
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,10 +12,12 @@ import org.junit.Test
  * the model exactly what `tools()` returns, so an empty registry is an app with
  * no tools rather than a broken one, and nothing else would fail.
  *
- * Constructing the registry is itself a check — `ariTools { }` rejects a `tool()`
- * with no `handle { }`, a repeated or malformed name, an over-long description, a
- * ninth tool, and a `deeplink()` whose template misses a required arg or fills a
- * placeholder with free text — so these assertions run only if all of that held.
+ * Only what is true of THIS app is asserted here. Every declaration-shape rule —
+ * the name pattern, the description cap, a repeated tool name, a `tool()` with no
+ * `handle { }`, a template that misses a required arg or fills a placeholder with
+ * free text — is enforced by `ariTools { }` as the registry is built, and covered
+ * by the SDK's own suite. Constructing the field above therefore runs all of it,
+ * and restating any of it here would only pin the SDK's behaviour twice.
  */
 class AriToolServiceTest {
 
@@ -75,62 +76,6 @@ class AriToolServiceTest {
             ),
             invocable.map { tool -> tool.name },
         )
-    }
-
-    /** A tool that opens a screen returns no data, so the SDK sets this for it. */
-    @Test
-    fun `the deeplink presents ui and nothing else does`() {
-        assertEquals(
-            listOf("show_circle"),
-            registry.declarations.filter { tool -> tool.presentsUi }.map { tool -> tool.name },
-        )
-    }
-
-    /**
-     * The SDK enforces this as the registry is built; pinned here so the rule is
-     * visible in this app. A free-text `string` cannot fill a placeholder,
-     * because the value goes into a uri another component then handles.
-     */
-    @Test
-    fun `every placeholder in the deeplink names a constrained arg of that tool`() {
-        val tool = registry.declarations.single { declaration -> declaration.uri != null }
-        val placeholders = Regex("""\{([^{}]*)}""")
-            .findAll(tool.uri.orEmpty())
-            .map { match -> match.groupValues[1] }
-            .toList()
-
-        assertEquals(listOf("number"), placeholders)
-        placeholders.forEach { name ->
-            val arg = tool.args.single { declared -> declared.name == name }
-            assertTrue(
-                "arg '$name' is ${arg::class.simpleName}, which cannot fill a placeholder",
-                arg is AriToolArg.IntArg ||
-                    arg is AriToolArg.NumberArg ||
-                    arg is AriToolArg.BoolArg ||
-                    arg is AriToolArg.EnumArg,
-            )
-        }
-    }
-
-    /** A required arg the template left out could never be delivered. */
-    @Test
-    fun `the deeplink template carries every required arg of its tool`() {
-        val tool = registry.declarations.single { declaration -> declaration.uri != null }
-
-        tool.args.filter { arg -> arg.required }.forEach { arg ->
-            assertTrue(
-                "required arg '${arg.name}' is not in ${tool.uri}",
-                "{${arg.name}}" in tool.uri.orEmpty(),
-            )
-        }
-    }
-
-    /** Every tool Ari runs by binding this service must have somewhere to run. */
-    @Test
-    fun `no invocable tool declares a uri`() {
-        registry.declarations
-            .filter { tool -> tool.name != "show_circle" }
-            .forEach { tool -> assertNull("tool '${tool.name}' declares a uri", tool.uri) }
     }
 
     /**

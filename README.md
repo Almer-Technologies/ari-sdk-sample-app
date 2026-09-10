@@ -712,10 +712,9 @@ Still **not** exercised on hardware:
   compiled and packaged, and was not run in this pass.
 
 The JVM checks still stand underneath all of that: the app builds, the
-declaration ships inside the APK, it satisfies the real constants in
-`AriToolsContract` (`AriToolsDeclarationContractTest`), and every tool returns
-what it should when its handler is invoked through the binder
-(`AriToolHandlerTest`).
+declaration ships inside the APK and matches the registry it came from
+(`AriToolsAssetTest`), and every tool returns what it should when its handler is
+invoked through the binder (`AriToolHandlerTest`).
 
 The handler tests reach the service through the same binder Ari calls, but they
 call it in-process. No real Binder transaction crosses, which is exactly why
