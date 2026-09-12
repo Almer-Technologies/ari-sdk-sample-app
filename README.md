@@ -1,6 +1,6 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes six capabilities to Ari. It ships as one
+A minimal Android app that exposes six tools to Ari. It ships as one
 archive, `ari-tool-sample-<version>.zip`: unpack it into an empty directory and
 it builds, because the SDK and its Gradle plugin are in there under `sdk-repo/`.
 
@@ -8,7 +8,7 @@ Build it, install it, and say:
 
 > "Hey Ari, add a blue circle"
 
-**The app does not need to be open** — Ari reads its capabilities without launching it.
+**The app does not need to be open** — Ari reads its declaration without launching it.
 
 This repo is the worked example, not the SDK reference: the SDK's own
 documentation is not in here, and this file covers what an integrating app does.
@@ -71,6 +71,14 @@ success, so the result says `"removed": 0` and the description tells the model
 what 0 means. Without that the natural narration is "removed the green ones"
 when there never were any.
 
+Where another of your tools genuinely repairs the failure, name it. `add_circle`
+at the six-circle limit returns `fixWith = "remove_circle"`, and Ari offers that
+tool to the user. Only name one
+that really does fix it — Ari puts it in front of them, so a hopeful guess costs
+a turn and some trust. The other two failures here name nothing, which is the
+honest answer: no tool resolves a colour this app does not know, and "there's no
+circle 7" already lists the circles that exist.
+
 ## How it works
 
 Three things, and you write all three:
@@ -104,8 +112,16 @@ framework method. Keep those in the handlers; the generator names the cause.
 At session start Ari opens that asset straight out of this app's installed APK —
 no IPC, no app launch — and tells the cloud the tools exist. When you ask for
 one, the call arrives over AIDL and the SDK dispatches it to the `handle { }`
-block declared with that tool. Anything invalid is dropped silently at runtime:
-the tool simply never reaches the model, with no error in your app.
+block declared with that tool.
+
+Every rule a declaration has to satisfy runs as `ariTools { }` builds the
+registry, and the generator builds it at build time — so a malformed name, an
+over-long description, a repeated tool or a template that leaves out a required
+argument fails `:app:assembleDebug` rather than going quiet. What can still
+vanish without a word is version skew: an Ari older than an argument type
+refuses that value and drops the one tool using it. The file's
+`declarationVersion` deliberately stays put when a type is added, so your other
+tools keep loading.
 
 `show_circle` is the exception. It is a **deeplink tool**: a `uri` and no
 handler, so Ari never binds the service and this app's process is never started
@@ -139,8 +155,9 @@ To run every check:
 version from `versionName` in `app/build.gradle.kts` and the file list from git.
 
 `.github/workflows/build.yml` runs that build and those tests on
-`ubuntu-latest`, then reads `assets/ari_tools.json` back out of the built APK to
-prove all six tools reached it. It cannot detect an upstream SDK change breaking
+`ubuntu-latest`, then reads `assets/ari_tools.json` back out of the built APK
+and diffs it against what the plugin wrote, proving the declaration reached the
+APK byte for byte. It cannot detect an upstream SDK change breaking
 a partner: nothing here rebuilds the SDK, so a green run proves the sample works
 against *the AAR that is committed* — the exact artifact you get.
 
@@ -165,12 +182,34 @@ ariTools { declarations = "com.example.myapp.MyTools" }
 dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.0") }
 ```
 
-**Do not list the SDK's own dependencies.** `sdk-repo/` is a Maven repository,
-not a folder of loose files, and the POM beside the AAR declares all four —
-`kotlin-stdlib`, `kotlinx-serialization-json`, `kotlinx-coroutines-core` and
-`kotlinx-coroutines-android` — so Gradle brings them in. That is why it is a
+What you import sits in two packages. `com.ari_os.ari.sdk.declaration` holds
+what you declare tools with — `AriToolDeclarations`, `ariTools { }`,
+`AriToolRegistry` — and `com.ari_os.ari.sdk` holds what runs them:
+`AriToolProviderService`, `ToolArgs`, `AriToolResult`, `AriToolErrorCode`,
+`AriToolAvailability`. There is a third, `com.ari_os.ari.sdk.protocol`, and most
+of it is Ari's own half of the wire, marked so that using it is a compile error.
+`AriToolsContract` lives there and is yours to read: it carries the limits your
+declaration has to fit.
+
+**The SDK brings its own dependencies — but only one of them to your compiler.**
+`sdk-repo/` is a Maven repository, not a folder of loose files, so Gradle reads
+the metadata beside the AAR and puts all four of `kotlin-stdlib`,
+`kotlinx-serialization-json`, `kotlinx-coroutines-core` and
+`kotlinx-coroutines-android` on the runtime classpath. That is why it is a
 `maven { }` entry and not `flatDir`: a bare AAR carries no metadata, so a
 `flatDir` project compiles and then dies with `NoClassDefFoundError`.
+
+Only `kotlin-stdlib` reaches the **compile** classpath. The SDK keeps coroutines
+out of its public API deliberately, so the other three are runtime scope: they
+are in your APK, and naming a type from one of them in your own source is still
+a compile error. Declare what you name, and pin it to the version the SDK
+resolves — otherwise a transitive copy from somewhere else compiles your code
+against one version while another runs it:
+
+```kotlin
+// only if your own code names a coroutines type, as CircleState does
+implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+```
 
 Your app must compile against **API 36 or newer** (`compileSdk = 36`); the AAR
 records that floor and AGP enforces it. Your `minSdk` and `targetSdk` are
@@ -194,6 +233,8 @@ from and how new ones are produced. When the RealWear Maven repository exists,
 | The build says reading your declarations called an Android framework method | A tool declaration called into the framework. Only a `handle { }` may. |
 | `show_circle` does nothing at all, with no error anywhere | The `<intent-filter>` does not match the uri Ari built. Android drops an unmatched intent silently and your app is never told. |
 | A handler test throws about a missing main dispatcher | No `Dispatchers.setMain(...)` in `@Before`. Every handler runs on the main dispatcher and a JVM test has to supply one. |
+| Your code won't compile against a coroutines type the APK clearly contains | The SDK depends on coroutines at runtime scope only. Declare `kotlinx-coroutines-core` yourself, at the SDK's version. |
+| A compile error saying Ari reads this, and a provider declares tools instead | You reached into `com.ari_os.ari.sdk.protocol` for Ari's half of the wire. The opt-in marker is the SDK telling you there's a partner-facing way to do it. |
 
 ```bash
 adb logcat -d | grep -iE "AppToolRegistry|tool provider|appTools"
@@ -211,14 +252,16 @@ disabling and re-enabling the app. Every tool ran by voice, including
 `remove_circles_by_color` removing 2 circles and later 3, each in one call with
 one confirmation, and `show_circle` opening `aridemo://circle/3` with no bind.
 
-Still **not** exercised on hardware: `cancel()` and `setAvailable`, launch
-results, the oversize caps on results and arguments, declaration version skew,
-saying no at a confirmation, an invalid enum value, the seventh-circle limit,
-Android 16 background-launch rules, and `PendingIntent` immutability on API 30.
-The permission gate and `PendingIntent.isImmutable` no JVM test here can cover:
-the stubbed `android.jar` makes the first a no-op and cannot report the second.
+Still **not** exercised on hardware: `cancel()` and `AriToolAvailability.set`,
+the oversize caps on results and arguments, declaration version skew, saying no
+at a confirmation, an invalid enum value, the seventh-circle limit and the
+`fixWith` it now returns, and Android 16 background-launch rules. The permission
+gate is the one thing no JVM test here can cover either: the stubbed
+`android.jar` makes it a no-op.
 
-One caveat on that run: it predates both the AAR and the generated asset. It
-used a module built from the same leviathan commit as `sdk-repo/` and shipped
-the asset this plugin now writes, byte for byte — but that binary was not the
-one on the headset, and `compileSdk` has moved 35 -> 36 since.
+Two caveats on that run, and they have grown. It predates the generated asset.
+It also predates this AAR: the headset ran a module built from leviathan
+`5f6cd8fd9`, and `sdk-repo/` now holds `d5d5c6d1f6`, which split the SDK's
+packages, renamed its error codes and removed launch results altogether.
+`compileSdk` has moved 35 -> 36 as well. Read the run as evidence that the wire
+works end to end, not that this tree has been on a device.

@@ -16,9 +16,10 @@
 # sources or runs the SDK's own tests: they are not in this repo.
 #
 # WHAT NOTHING HERE COVERS: the device. No emulator, no headset. The
-# permission gate is a no-op under the android unit-test jar and a launch
-# result cannot report PendingIntent.isImmutable there, so neither is
-# exercised. See "Verified on hardware" in the README.
+# permission gate is a no-op under the android unit-test jar, and the deeplink
+# half of the sample stops at the manifest: CircleDeeplinkTest proves the
+# filter is DECLARED to match the uri show_circle declares, not that Android
+# resolves it. See "Verified on hardware" in the README.
 #
 # RUNNER: ubuntu-latest, a hosted runner. This build needs a JDK and an Android
 # SDK and nothing else — no signing keys, no emulator, no Xcode, no
