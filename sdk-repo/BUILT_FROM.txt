@@ -4,7 +4,7 @@ com.ari_os.ari-tools:com.ari_os.ari-tools.gradle.plugin:0.1.0 — built by
 :libs:ari-tool-sdk:publishToMavenLocal and
 :libs:ari-tool-gradle-plugin:publishToMavenLocal on JDK 21 from leviathan commit
 
-    d5d5c6d1f627c992da2c5c9d1bef68449d1db872   (MOBILE-2340-ari-tool-sdk)
+    05a0ceff308e7b0966456d71a740ef4a039fd18a   (MOBILE-2340-ari-tool-sdk)
 
 The marker is the pom Gradle looks up for `id("com.ari_os.ari-tools")`; it
 carries no jar of its own and points at the implementation. All three move
