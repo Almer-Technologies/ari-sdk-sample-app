@@ -69,9 +69,21 @@ tasks.withType<Test>().configureEach {
 
 dependencies {
     // Resolved from sdk-repo/, the Maven repository committed in this repo.
-    // The SDK's own dependencies — kotlin-stdlib, kotlinx-serialization-json and
-    // the two coroutines artifacts — come from its POM, so nothing here lists them.
+    // Of the SDK's four dependencies only kotlin-stdlib is on the compile
+    // classpath. kotlinx-serialization-json and the two coroutines artifacts are
+    // runtime scope, because the SDK keeps coroutines out of its public API — so
+    // they are on the APK's classpath but no source here can NAME a type from
+    // them through this dependency. See kotlinx-coroutines-core below.
     implementation("com.ari_os:ari-tool-sdk:0.1.0")
+
+    // CircleState holds its circles in a MutableStateFlow, so a main source names
+    // a coroutines type and has to declare it. Without this line it still
+    // compiles, against whatever version Compose happens to drag in — measured as
+    // 1.8.1 from androidx.compose.animation, while the SDK resolves 1.10.1 at
+    // runtime. That skew is the bug this line closes; it is not a dependency
+    // nothing uses. Pinned to the SDK's version so one copy resolves.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation(platform("androidx.compose:compose-bom:2025.08.00"))
@@ -89,7 +101,7 @@ dependencies {
 
     // AriToolHandlerTest drives real tool calls, and every handler runs on the
     // main dispatcher. A JVM test has to supply one, so it needs setMain and a
-    // test dispatcher. Version matched to the coroutines version the SDK's POM
-    // brings in, so the test dispatcher and the runtime agree.
+    // test dispatcher. Version matched to the coroutines version above, so the
+    // test dispatcher and the runtime agree.
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
 }
