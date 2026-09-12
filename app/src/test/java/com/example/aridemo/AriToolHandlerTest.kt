@@ -83,12 +83,17 @@ class AriToolHandlerTest {
      * The other side of the test above: a failure with no honest repair carries no
      * `fixWith` at all. Ari offers the user whatever is named, so a field filled in
      * for the sake of filling it in points them at a tool that cannot help.
+     *
+     * Both of the app's other failure builders are checked, because each would
+     * have to be filled in separately to go wrong.
      */
     @Test
-    fun `a failure with no repair tool names none`() {
-        val failure = failure(invoke("remove_circle", """{"number":7}"""))
+    fun `the failures with no repair tool name none`() {
+        val noSuchCircle = failure(invoke("remove_circle", """{"number":7}"""))
+        val unknownColor = failure(invoke("set_circle_color", """{"color":"cerulean"}"""))
 
-        assertNull(failure.fixWith)
+        assertNull(noSuchCircle.fixWith)
+        assertNull(unknownColor.fixWith)
     }
 
     /**

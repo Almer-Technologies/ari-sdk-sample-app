@@ -32,8 +32,22 @@ import com.ari_os.ari.sdk.declaration.ariTools
  * `confirm` is read by the cloud and defaults to `false`, so every tool below
  * says why it does or does not prompt — a flag left off looks the same whether
  * it was decided or overlooked. Nothing verifies who declared it.
+ *
+ * `fixWith` goes the other way: exactly one failure here names one, and the rest
+ * name nothing on purpose. Ari puts the named tool in front of the user, so the
+ * field is only worth setting where that tool really does repair the call. See
+ * [addCircle] for the one that does, and [unknownColor] and [noSuchCircle] for
+ * the two that have nothing honest to offer.
  */
 object DemoTools : AriToolDeclarations {
+
+    /**
+     * Read twice — declared below, and named as the fix when the screen is full.
+     * The other five names appear once each, so they stay literals; this one
+     * would otherwise be a copy kept in step by hand, which the SDK cannot catch
+     * for us. An undeclared `fixWith` is dropped at runtime with only a log line.
+     */
+    private const val REMOVE_CIRCLE = "remove_circle"
 
     override val registry = ariTools {
 
@@ -70,7 +84,7 @@ object DemoTools : AriToolDeclarations {
          * the green circles" with one prompting call per match.
          */
         tool(
-            name = "remove_circle",
+            name = REMOVE_CIRCLE,
             description = "Removes exactly one circle, the one with this number. For every " +
                 "circle of a colour, call remove_circles_by_color once instead of calling this " +
                 "once per match. Other circles keep their own numbers, so a number from an " +
@@ -213,16 +227,14 @@ object DemoTools : AriToolDeclarations {
     }
 
     /**
-     * The one failure in this registry with a fix worth naming. `fixWith` says
-     * running that tool repairs this call, and Ari offers it to the user, so it
-     * is only honest where it is true: at [CircleState.MAX_CIRCLES] there are
-     * always circles on screen, and `remove_circle` frees exactly the one slot
-     * this call wants. The SDK drops a name the app does not declare.
+     * The full-screen refusal is the one failure here worth a `fixWith`:
+     * [REMOVE_CIRCLE] frees exactly the one slot this call wants, and at
+     * [CircleState.MAX_CIRCLES] there is always a circle to remove, so the tool
+     * Ari offers can always run.
      *
-     * The other two failures name none, and that is the point of the field. No
-     * tool repairs a colour this app cannot resolve, and [noSuchCircle] already
-     * lists the live numbers in its own text, so offering `list_circles` there
-     * would only look like help.
+     * It does take a `number`, so the repair is a step rather than a tap. That is
+     * as good as this registry gets — every removal tool takes an argument — and
+     * the numbers are printed on the circles the user is looking at.
      */
     private fun addCircle(requested: String?): AriToolResult {
         val color = requested ?: CircleState.DEFAULT_COLOR
@@ -233,7 +245,7 @@ object DemoTools : AriToolDeclarations {
                 AriToolErrorCode.TEMPORARILY_UNAVAILABLE,
                 "There are already ${CircleState.MAX_CIRCLES} circles, " +
                     "which is the maximum. Remove one first.",
-                fixWith = "remove_circle",
+                fixWith = REMOVE_CIRCLE,
             )
         return AriToolResult.ok {
             putInt("number", number)

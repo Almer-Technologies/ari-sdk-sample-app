@@ -234,7 +234,7 @@ from and how new ones are produced. When the RealWear Maven repository exists,
 | `show_circle` does nothing at all, with no error anywhere | The `<intent-filter>` does not match the uri Ari built. Android drops an unmatched intent silently and your app is never told. |
 | A handler test throws about a missing main dispatcher | No `Dispatchers.setMain(...)` in `@Before`. Every handler runs on the main dispatcher and a JVM test has to supply one. |
 | Your code won't compile against a coroutines type the APK clearly contains | The SDK depends on coroutines at runtime scope only. Declare `kotlinx-coroutines-core` yourself, at the SDK's version. |
-| A compile error saying Ari reads this, and a provider declares tools instead | You reached into `com.ari_os.ari.sdk.protocol` for Ari's half of the wire. The opt-in marker is the SDK telling you there's a partner-facing way to do it. |
+| `Ari reads this. A tool provider declares tools and returns results instead.` | You reached into `com.ari_os.ari.sdk.protocol` for Ari's half of the wire. The opt-in marker is the SDK telling you there is a partner-facing way to do the same thing. |
 
 ```bash
 adb logcat -d | grep -iE "AppToolRegistry|tool provider|appTools"
