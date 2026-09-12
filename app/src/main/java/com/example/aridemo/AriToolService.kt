@@ -1,7 +1,7 @@
 package com.example.aridemo
 
 import com.ari_os.ari.sdk.AriToolProviderService
-import com.ari_os.ari.sdk.AriToolRegistry
+import com.ari_os.ari.sdk.declaration.AriToolRegistry
 
 /**
  * The runtime half of the integration: what Ari binds to when it invokes a tool.

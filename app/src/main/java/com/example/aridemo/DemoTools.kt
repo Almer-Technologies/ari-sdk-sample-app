@@ -1,9 +1,9 @@
 package com.example.aridemo
 
-import com.ari_os.ari.sdk.AriToolDeclarations
 import com.ari_os.ari.sdk.AriToolErrorCode
 import com.ari_os.ari.sdk.AriToolResult
-import com.ari_os.ari.sdk.ariTools
+import com.ari_os.ari.sdk.declaration.AriToolDeclarations
+import com.ari_os.ari.sdk.declaration.ariTools
 
 /**
  * Every tool this app exposes to Ari, and the code that runs each one.
@@ -176,14 +176,18 @@ object DemoTools : AriToolDeclarations {
          * The only tool with no handler. Ari fills `{number}` and opens
          * `aridemo://circle/3` as `ACTION_VIEW` on this package; the manifest's
          * intent filter routes it to [MainActivity]. Nothing binds the service,
-         * and the SDK reports `app_error` if Ari invokes it instead.
+         * and the SDK reports `internal_error` if Ari invokes it instead.
          *
-         * Only a type whose values the declaration constrains — `int`, `number`,
-         * `bool` or `enum` — may fill a placeholder, because the value goes into a
-         * uri another component then handles; the SDK rejects a free-text `string`
-         * as you build the registry. A tool that has to take a phrase belongs in a
-         * `tool { }` whose `handle { }` validates the text and returns
-         * `AriToolResult.launch(...)`.
+         * A placeholder takes a type whose values the declaration constrains —
+         * `int`, `long`, `double`, `bool` or `enum` — because the value goes into
+         * a uri another component then handles. A list never fills one: a set has
+         * no meaning as a single uri component. A free-text `string` fills one
+         * only when the tool declares it with `freeTextInUri` rather than
+         * `string`, which is the SDK making the deliberate case say so out loud —
+         * nothing in the declaration bounds that text, so whatever handles the
+         * link must read it as untrusted input. That opt-in is how a tool takes a
+         * phrase. Every tool that opens a screen is a deeplink; no result opens
+         * one.
          *
          * The template is [CircleDeeplink.TEMPLATE], so what Ari opens and what
          * the app parses are one constant.
@@ -208,15 +212,28 @@ object DemoTools : AriToolDeclarations {
         }
     }
 
+    /**
+     * The one failure in this registry with a fix worth naming. `fixWith` says
+     * running that tool repairs this call, and Ari offers it to the user, so it
+     * is only honest where it is true: at [CircleState.MAX_CIRCLES] there are
+     * always circles on screen, and `remove_circle` frees exactly the one slot
+     * this call wants. The SDK drops a name the app does not declare.
+     *
+     * The other two failures name none, and that is the point of the field. No
+     * tool repairs a colour this app cannot resolve, and [noSuchCircle] already
+     * lists the live numbers in its own text, so offering `list_circles` there
+     * would only look like help.
+     */
     private fun addCircle(requested: String?): AriToolResult {
         val color = requested ?: CircleState.DEFAULT_COLOR
         if (CircleState.colorOf(color) == null) return unknownColor(color)
 
         val number = CircleState.add(color)
             ?: return AriToolResult.error(
-                AriToolErrorCode.UNAVAILABLE,
+                AriToolErrorCode.TEMPORARILY_UNAVAILABLE,
                 "There are already ${CircleState.MAX_CIRCLES} circles, " +
                     "which is the maximum. Remove one first.",
+                fixWith = "remove_circle",
             )
         return AriToolResult.ok {
             putInt("number", number)

@@ -1,6 +1,6 @@
 package com.example.aridemo
 
-import com.ari_os.ari.sdk.AriToolArg
+import com.ari_os.ari.sdk.declaration.AriToolArg
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

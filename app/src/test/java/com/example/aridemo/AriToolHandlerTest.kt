@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.setMain
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -61,15 +62,33 @@ class AriToolHandlerTest {
         assertEquals(CircleState.DEFAULT_COLOR, payload.string("color"))
     }
 
-    /** `unavailable` is the code that tells Ari a retry works once one is removed. */
+    /**
+     * `temporarily_unavailable` is the code that tells Ari a retry works once one
+     * is removed, and `fixWith` names the tool that makes it work. Both halves are
+     * asserted: the code alone leaves Ari guessing which tool to offer, and a
+     * `fixWith` the app does not declare is dropped by the SDK before Ari sees it.
+     */
     @Test
-    fun `add_circle past the limit reports unavailable`() {
+    fun `add_circle past the limit reports temporarily_unavailable and names the fix`() {
         repeat(CircleState.MAX_CIRCLES - 1) { invoke("add_circle") }
 
         val failure = failure(invoke("add_circle"))
 
-        assertEquals(AriToolErrorCode.UNAVAILABLE.wireValue, failure.code)
+        assertEquals(AriToolErrorCode.TEMPORARILY_UNAVAILABLE.wireValue, failure.code)
         assertTrue(failure.message, "${CircleState.MAX_CIRCLES}" in failure.message.orEmpty())
+        assertEquals("remove_circle", failure.fixWith)
+    }
+
+    /**
+     * The other side of the test above: a failure with no honest repair carries no
+     * `fixWith` at all. Ari offers the user whatever is named, so a field filled in
+     * for the sake of filling it in points them at a tool that cannot help.
+     */
+    @Test
+    fun `a failure with no repair tool names none`() {
+        val failure = failure(invoke("remove_circle", """{"number":7}"""))
+
+        assertNull(failure.fixWith)
     }
 
     /**
@@ -244,14 +263,14 @@ class AriToolHandlerTest {
 
     /**
      * Invoking a deeplink tool is Ari's mistake, not the model's, so the SDK says
-     * `app_error` rather than reporting a missing tool. This is all a JVM test can
-     * say about the deeplink path — the screen it opens needs a device.
+     * `internal_error` rather than reporting a missing tool. This is all a JVM
+     * test can say about the deeplink path — the screen it opens needs a device.
      */
     @Test
-    fun `invoking the deeplink tool reports app_error rather than running anything`() {
+    fun `invoking the deeplink tool reports internal_error rather than running anything`() {
         val failure = failure(invoke("show_circle", """{"number":1}"""))
 
-        assertEquals(AriToolErrorCode.APP_ERROR.wireValue, failure.code)
+        assertEquals(AriToolErrorCode.INTERNAL_ERROR.wireValue, failure.code)
         assertTrue(failure.message, "deeplink" in failure.message.orEmpty())
     }
 

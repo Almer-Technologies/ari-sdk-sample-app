@@ -35,11 +35,11 @@
         {
           "name": "ari-tool-sdk-0.1.0.aar",
           "url": "ari-tool-sdk-0.1.0.aar",
-          "size": 135234,
-          "sha512": "696759096fb7c539f6532d39eb8f36c330b28090746523e460904babc3693e71e776cc13a533692ccee67cd6e84334a7d39c315bd3339864edd635ea4b08214f",
-          "sha256": "79926aa2ef6e77fd524da8913f1f36e8642f3b60a0ddc0f79b86178657118c65",
-          "sha1": "b766836b3f49de4566f216198c6646102d7e8ba4",
-          "md5": "865669a9b35fb65359539670834e475a"
+          "size": 147580,
+          "sha512": "3c8c857de18ae64cdb5df7fc00606ef5111132c3436c0216dd8e3ae976b50b0ea7e363595fbfb9520f925e925f230a301ce84591561bd18e16d5e7c58ac20aa7",
+          "sha256": "b71bebd4ba07eafd43931009b9ad79f8b7be5ff793132cde8db6188fc76b68d2",
+          "sha1": "a3e9709b01ef0b8ab711f446ed5f83eddfcb3543",
+          "md5": "7e4316e50a490381a29392258186f1c6"
         }
       ]
     },
@@ -85,11 +85,11 @@
         {
           "name": "ari-tool-sdk-0.1.0.aar",
           "url": "ari-tool-sdk-0.1.0.aar",
-          "size": 135234,
-          "sha512": "696759096fb7c539f6532d39eb8f36c330b28090746523e460904babc3693e71e776cc13a533692ccee67cd6e84334a7d39c315bd3339864edd635ea4b08214f",
-          "sha256": "79926aa2ef6e77fd524da8913f1f36e8642f3b60a0ddc0f79b86178657118c65",
-          "sha1": "b766836b3f49de4566f216198c6646102d7e8ba4",
-          "md5": "865669a9b35fb65359539670834e475a"
+          "size": 147580,
+          "sha512": "3c8c857de18ae64cdb5df7fc00606ef5111132c3436c0216dd8e3ae976b50b0ea7e363595fbfb9520f925e925f230a301ce84591561bd18e16d5e7c58ac20aa7",
+          "sha256": "b71bebd4ba07eafd43931009b9ad79f8b7be5ff793132cde8db6188fc76b68d2",
+          "sha1": "a3e9709b01ef0b8ab711f446ed5f83eddfcb3543",
+          "md5": "7e4316e50a490381a29392258186f1c6"
         }
       ]
     }
