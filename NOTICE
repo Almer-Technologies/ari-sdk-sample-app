@@ -1,0 +1,20 @@
+Ari Tool Sample
+Copyright 2026 RealWear, Inc.
+
+This product includes software developed by RealWear, Inc.
+
+The sample application in this repository is licensed under the Apache
+License, Version 2.0. See the LICENSE file.
+
+The Ari App Tools SDK is NOT licensed under the Apache License, Version 2.0,
+and the LICENSE file in this repository grants no rights in it. Specifically,
+these artifacts are excluded:
+
+    com.ari_os:ari-tool-sdk
+    com.ari_os:ari-tool-gradle-plugin
+
+They are proprietary software of RealWear, Inc. They are not distributed in
+this repository. They are supplied separately, and your use of them is
+governed solely by your written agreement with RealWear, Inc.
+
+To obtain them, contact info@realwear.com.

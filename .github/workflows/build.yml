@@ -1,0 +1,174 @@
+# Checks this repository, and — only where the SDK is available — builds the
+# sample app and runs its unit tests.
+#
+# THE SPLIT, AND WHY IT EXISTS: the Ari App Tools SDK is proprietary and is not
+# in this repository (see NOTICE). Without it nothing compiles, so a workflow
+# that always ran `./gradlew :app:assembleDebug` would be red on every push
+# here, forever, and a permanently red badge teaches everyone to ignore it. So
+# the steps that need no SDK run always, and the build is gated on sdk-repo/
+# being present — which it is in a fork or clone by whoever has the SDK, and in
+# the archive scripts/package-release.sh cuts. Nothing is skipped silently: the
+# last step says why.
+#
+# WHAT THE ALWAYS-ON CHECKS CATCH: the two things that must stay true of a
+# public repository. The SDK binaries must not come back into git — that is the
+# whole point of the .gitignore entry, and an accidental `git add -f` is exactly
+# the kind of mistake nobody notices in a diff. And assets/ari_tools.json must
+# stay generated rather than committed: measured, with an asset committed at
+# src/main/assets AND the plugin generating one, the generated copy wins the
+# merge and the build stays green — so a stale committed file is invisible in
+# the APK and simply misleads whoever reads the source tree.
+#
+# WHAT THE GATED BUILD CATCHES: a sample that no longer compiles against the SDK
+# AAR, a test that no longer passes, and a tool declaration the build cannot
+# produce — the Ari Gradle plugin runs DemoTools in a plain JVM to write
+# assets/ari_tools.json, so a declaration that calls an Android framework method,
+# or grows past the 64 KB cap, fails :app:assembleDebug there.
+#
+# WHAT IT DOES NOT CATCH: upstream SDK changes breaking a partner. The SDK is
+# consumed as a binary out of sdk-repo/, and nothing here rebuilds it from its
+# own sources. So a green run proves the sample works against THE AAR THAT WAS
+# SUPPLIED — the exact artifact a partner gets — and says nothing about the Ari
+# OS platform build's current source. Upstream can move under this sample and
+# every run stays green until someone republishes the AAR (BUILT_FROM.txt, which
+# comes with sdk-repo/, says how). Nothing here compiles the SDK's own sources
+# or runs the SDK's own tests: they are not in this repository.
+#
+# WHAT NOTHING HERE COVERS: the device. No emulator, no headset. The
+# permission gate is a no-op under the android unit-test jar, and the deeplink
+# half of the sample stops at the manifest: CircleDeeplinkTest proves the
+# filter is DECLARED to match the uri show_circle declares, not that Android
+# resolves it. See "Verified on hardware" in the README.
+#
+# RUNNER: ubuntu-latest, a hosted runner. This build needs a JDK and an Android
+# SDK and nothing else — no signing keys, no emulator, no Xcode, no
+# submodules, and no network repository beyond google() + mavenCentral() plus
+# whatever sdk-repo/ supplies. The hosted Ubuntu image ships an Android SDK with
+# its licences accepted, so AGP can fetch any platform or build-tools it is
+# missing — including android-36, which the SDK AAR's metadata requires
+# consumers to compile against. A hosted runner also keeps this repo forkable by
+# a partner, which a self-hosted one would not.
+#
+# JDK 21, pinned rather than inherited. AGP 9.1.0 needs 17 or newer, no module
+# declares a toolchain, so whatever JDK Gradle runs on is the one that compiles
+# the code. 21 is what the README tells a partner to use and what this was
+# verified against locally.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Always. The SDK binaries are proprietary and must never be committed
+      # here; .gitignore says so, and this is what makes that stick.
+      - name: Check no SDK binaries are committed
+        run: |
+          if git ls-files -- sdk-repo | grep -q .; then
+            echo "sdk-repo/ is tracked — the SDK must not be committed" >&2
+            git ls-files -- sdk-repo >&2
+            exit 1
+          fi
+          echo "no SDK binaries are tracked"
+
+      # Always. Nothing generates src/main/assets/ari_tools.json any more, and
+      # nothing may: see the header.
+      - name: Check no declaration asset is committed
+        run: |
+          if git ls-files -- '**/assets/ari_tools.json' | grep -q .; then
+            echo "ari_tools.json is committed — the plugin generates it" >&2
+            exit 1
+          fi
+          echo "no declaration asset is tracked"
+
+      # Everything below is gated on this. A checkout of this repository alone
+      # has no sdk-repo/; a checkout by someone who has the SDK does.
+      - name: Look for the SDK
+        id: sdk
+        run: |
+          if [ -d sdk-repo ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 21
+        if: steps.sdk.outputs.present == 'true'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        if: steps.sdk.outputs.present == 'true'
+        uses: gradle/actions/setup-gradle@v6
+
+      # local.properties is gitignored, so there is no sdk.dir here. The build
+      # finds the SDK through ANDROID_HOME, which the hosted image sets.
+      - name: Report the toolchain
+        if: steps.sdk.outputs.present == 'true'
+        run: |
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ./gradlew --version
+
+      # :app is the only module. Resolving the SDK *and the Gradle plugin* from
+      # sdk-repo/ is part of what this proves: a run that could not find the AAR,
+      # or found it without its POM, or could not resolve the plugin marker under
+      # pluginManagement, fails here rather than at a partner's first launch.
+      - name: Build and test
+        if: steps.sdk.outputs.present == 'true'
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleDebug \
+            :app:testDebugUnitTest
+
+      # The asset is generated, so this diffs the shipped bytes against the
+      # plugin's own output. What it guards is the wiring: the plugin writes
+      # into build/, and only addGeneratedSourceDirectory puts that folder in
+      # front of mergeAssets. If the link broke, the build stays green and the
+      # APK ships no declaration at all — unzip fails here instead. Comparing
+      # bytes rather than a list of names keeps the tool names in one place.
+      - name: Check the declaration ships inside the APK
+        if: steps.sdk.outputs.present == 'true'
+        run: |
+          unzip -p app/build/outputs/apk/debug/app-debug.apk \
+            assets/ari_tools.json > /tmp/ari_tools_from_apk.json
+          diff app/build/generated/assets/generateDebugAriTools/ari_tools.json \
+            /tmp/ari_tools_from_apk.json
+          echo "the APK ships the declaration the plugin generated"
+
+      - name: Upload test reports
+        if: failure() && steps.sdk.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          if-no-files-found: ignore
+
+      # Skipped, not broken — and said out loud, so nobody reads a green run as
+      # proof the sample compiles.
+      - name: Explain the skipped build
+        if: steps.sdk.outputs.present != 'true'
+        run: |
+          echo "::notice::The app was not built: the Ari App Tools SDK is not in this repository."
+          echo "sdk-repo/ holds com.ari_os:ari-tool-sdk and com.ari_os:ari-tool-gradle-plugin,"
+          echo "which are proprietary RealWear software supplied under a written agreement."
+          echo "See NOTICE. To build, obtain the SDK from the RealWear Developer Program"
+          echo "(info@realwear.com), put sdk-repo/ in the project root, and run"
+          echo "./gradlew :app:assembleDebug :app:testDebugUnitTest."

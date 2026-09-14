@@ -1,0 +1,15 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+
+# The Ari App Tools SDK and its Gradle plugin. Proprietary, supplied
+# separately, and deliberately not part of this repository — see NOTICE.
+# The build needs the folder here; git must never take a copy of it.
+/sdk-repo/
+
+# Local tooling symlinks, not part of the sample.
+/zeus
+/.zeus
