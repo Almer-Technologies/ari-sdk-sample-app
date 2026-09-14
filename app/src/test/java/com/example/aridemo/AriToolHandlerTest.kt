@@ -28,7 +28,7 @@ import org.junit.Test
  *
  * The `@OptIn` covers `Dispatchers.setMain`/`resetMain` and
  * `UnconfinedTestDispatcher`, all [ExperimentalCoroutinesApi], since this
- * project sets no global opt-in flag the way leviathan does.
+ * project sets no global opt-in flag the way the SDK's own build does.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AriToolHandlerTest {

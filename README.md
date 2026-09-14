@@ -1,8 +1,13 @@
 # Ari Tool Sample — numbered circles
 
-A minimal Android app that exposes six tools to Ari. It ships as one
-archive, `ari-tool-sample-<version>.zip`: unpack it into an empty directory and
-it builds, because the SDK and its Gradle plugin are in there under `sdk-repo/`.
+A minimal Android app that exposes six tools to Ari.
+
+**The Ari App Tools SDK is not in this repository.** What is here is the
+sample's own source, under the Apache License 2.0. The SDK and its Gradle plugin
+are proprietary RealWear software and come from the RealWear Developer Program
+as a folder named `sdk-repo/` — drop that folder into the project root and
+everything below works unchanged. See [NOTICE](NOTICE), and
+[Build and install](#build-and-install) for what to do if you don't have it yet.
 
 Build it, install it, and say:
 
@@ -136,6 +141,14 @@ is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 
 ## Build and install
 
+**First, get `sdk-repo/`.** It is a Maven repository folder holding
+`com.ari_os:ari-tool-sdk` and `com.ari_os:ari-tool-gradle-plugin`, and it is not
+distributed in this repository — it comes from the RealWear Developer Program
+(`info@realwear.com`), either on its own or inside the partner archive described
+below. Put it in the project root, beside `settings.gradle.kts`. Without it the
+build stops at the settings script and tells you the folder is missing; nothing
+else here needs changing once it is in place.
+
 ```bash
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -144,22 +157,29 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 The build needs JDK 21 and an Android SDK with **API 36** — either an `sdk.dir`
 in `local.properties` or `ANDROID_HOME` in the environment. No module declares a
 Gradle toolchain, so the JDK Gradle runs on is the one that compiles the code.
-Nothing is fetched for the SDK or the plugin: both resolve out of `sdk-repo/`.
-To run every check:
+Nothing is fetched over the network for the SDK or the plugin: both resolve out
+of `sdk-repo/` on disk. To run every check:
 
 ```bash
 ./gradlew :app:testDebugUnitTest
 ```
 
-`scripts/package-release.sh` rebuilds the archive into `build/dist/`, taking the
-version from `versionName` in `app/build.gradle.kts` and the file list from git.
+`scripts/package-release.sh` builds the partner archive,
+`build/dist/ari-tool-sample-<version>.zip`, taking the version from
+`versionName` in `app/build.gradle.kts`, the source file list from git and
+`sdk-repo/` off disk. That archive is one self-contained project: unpack it into
+an empty directory and it builds, because the SDK is in there. Running the
+script needs `sdk-repo/`, for the same reason building does.
 
-`.github/workflows/build.yml` runs that build and those tests on
-`ubuntu-latest`, then reads `assets/ari_tools.json` back out of the built APK
-and diffs it against what the plugin wrote, proving the declaration reached the
-APK byte for byte. It cannot detect an upstream SDK change breaking
-a partner: nothing here rebuilds the SDK, so a green run proves the sample works
-against *the AAR that is committed* — the exact artifact you get.
+`.github/workflows/build.yml` runs on `ubuntu-latest`. Two checks always run —
+that no SDK binary and no generated `ari_tools.json` have been committed — and
+the build and tests run only where `sdk-repo/` is present, which a clone of this
+repository alone is not. Where they do run, the workflow reads
+`assets/ari_tools.json` back out of the built APK and diffs it against what the
+plugin wrote, proving the declaration reached the APK byte for byte. It cannot
+detect an upstream SDK change breaking a partner: nothing here rebuilds the SDK,
+so a green run proves the sample works against *the AAR that was supplied* — the
+exact artifact you get.
 
 On the device, the **Ari app must be installed** — it defines the permission
 this app's service requires. Discovery runs when a voice session **starts**, so
@@ -170,7 +190,11 @@ installing this app mid-conversation leaves it invisible: restart the session.
 Copy `sdk-repo/` in; `settings.gradle.kts` here is the template. The one thing
 to copy exactly is that it names the folder **twice**: `pluginManagement` and
 `dependencyResolutionManagement` resolve from separate lists, so a project with
-only the second one compiles the SDK and cannot find the plugin.
+only the second one compiles the SDK and cannot find the plugin. (This project
+guards each entry with an `isDirectory` check and then fails with a sentence
+naming the folder. That is only so a reader who cloned the sample without the
+SDK gets told what is missing; your own project, which always has the folder,
+does not need it.)
 
 ```kotlin
 // settings.gradle.kts, in BOTH repository lists
@@ -220,9 +244,9 @@ subclass on the JVM: `testOptions { unitTests.isReturnDefaultValues = true }`,
 or the stubbed `android.jar` throws instead of returning defaults, and
 `testImplementation("org.json:json:...")`, or a result comes back empty.
 
-`sdk-repo/BUILT_FROM.txt` records which commit the AAR and the plugin were built
-from and how new ones are produced. When the RealWear Maven repository exists,
-`sdk-repo/` becomes its URL and nothing else above changes.
+`BUILT_FROM.txt`, which comes inside `sdk-repo/`, records which build the AAR and
+the plugin came from. When the RealWear Maven repository exists, `sdk-repo/`
+becomes its URL and nothing else above changes.
 
 ## Troubleshooting
 
@@ -260,8 +284,17 @@ gate is the one thing no JVM test here can cover either: the stubbed
 `android.jar` makes it a no-op.
 
 Two caveats on that run, and they have grown. It predates the generated asset.
-It also predates this AAR: the headset ran a module built from leviathan
-`5f6cd8fd9`, and `sdk-repo/` now holds `d5d5c6d1f6`, which split the SDK's
-packages, renamed its error codes and removed launch results altogether.
-`compileSdk` has moved 35 -> 36 as well. Read the run as evidence that the wire
-works end to end, not that this tree has been on a device.
+It also predates the current AAR: the headset ran an earlier SDK build than the
+one `sdk-repo/` now holds, and the newer one split the SDK's packages, renamed
+its error codes and removed launch results altogether. `compileSdk` has moved
+35 -> 36 as well. Read the run as evidence that the wire works end to end, not
+that this tree has been on a device.
+
+## Licence
+
+The sample in this repository — everything except `sdk-repo/` — is licensed
+under the Apache License 2.0. See [LICENSE](LICENSE).
+
+The Ari App Tools SDK and its Gradle plugin are **not** covered by that licence.
+They are proprietary RealWear software, supplied separately under a written
+agreement, and they are not distributed here. See [NOTICE](NOTICE).

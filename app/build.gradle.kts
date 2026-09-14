@@ -13,10 +13,10 @@ plugins {
 android {
     namespace = "com.example.aridemo"
 
-    // 36 because the SDK AAR requires it: leviathan builds the library against
-    // 36, so its aar-metadata carries minCompileSdk=36 and AGP fails the build
-    // of any consumer compiled lower. targetSdk stays where it is — that is a
-    // separate opt-in into new runtime behaviour, and this change is not it.
+    // 36 because the SDK AAR requires it: the SDK build compiles the library
+    // against 36, so its aar-metadata carries minCompileSdk=36 and AGP fails the
+    // build of any consumer compiled lower. targetSdk stays where it is — that is
+    // a separate opt-in into new runtime behaviour, and this change is not it.
     compileSdk = 36
 
     defaultConfig {
