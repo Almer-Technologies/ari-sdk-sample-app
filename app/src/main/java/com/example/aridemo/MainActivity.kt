@@ -41,7 +41,7 @@ private val VOICE_COMMANDS = listOf(
     "remove the purple circles" to "removes every purple one",
     "change circle 3 to yellow" to "recolours just that one",
     "change the colour to purple" to "recolours every circle",
-    "what's on screen?" to "reads back the circles",
+    "what circles do I have on screen?" to "reads back the circles",
     "show me circle 3" to "opens this app on it, with no service call",
 )
 
