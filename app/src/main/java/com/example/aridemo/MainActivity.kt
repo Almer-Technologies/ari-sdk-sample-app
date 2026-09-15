@@ -92,7 +92,7 @@ private fun CirclesScreen(requestedCircle: Int?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp, top = 96.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
