@@ -68,7 +68,8 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    // Resolved from sdk-repo/, the Maven repository committed in this repo.
+    // Resolved from sdk-repo/, the Maven repository you unzipped into the project
+    // root. It is not committed in this repo.
     // Of the SDK's four dependencies only kotlin-stdlib is on the compile
     // classpath. kotlinx-serialization-json and the two coroutines artifacts are
     // runtime scope, because the SDK keeps coroutines out of its public API — so

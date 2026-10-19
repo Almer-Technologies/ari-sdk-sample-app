@@ -34,7 +34,7 @@
 # comes with sdk-repo/, says how). Nothing here compiles the SDK's own sources
 # or runs the SDK's own tests: they are not in this repository.
 #
-# WHAT NOTHING HERE COVERS: the device. No emulator, no headset. The
+# WHAT NOTHING HERE COVERS: the device. No emulator, no hardware. The
 # permission gate is a no-op under the android unit-test jar, and the deeplink
 # half of the sample stops at the manifest: CircleDeeplinkTest proves the
 # filter is DECLARED to match the uri show_circle declares, not that Android
@@ -169,6 +169,7 @@ jobs:
           echo "::notice::The app was not built: the Ari App Tools SDK is not in this repository."
           echo "sdk-repo/ holds com.ari_os:ari-tool-sdk and com.ari_os:ari-tool-gradle-plugin,"
           echo "which are proprietary RealWear software supplied under a written agreement."
-          echo "See NOTICE. To build, obtain the SDK from the RealWear Developer Program"
-          echo "(info@realwear.com), put sdk-repo/ in the project root, and run"
+          echo "See NOTICE. To build, download the SDK zip from"
+          echo "https://rwcloudappmarketplace.blob.core.windows.net/developer/Ari-App-Tools-SDK-0.1.0.zip"
+          echo "unzip it in the project root, and run"
           echo "./gradlew :app:assembleDebug :app:testDebugUnitTest."
