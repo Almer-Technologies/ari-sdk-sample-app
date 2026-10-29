@@ -43,7 +43,7 @@ class AriToolServiceTest {
     }
 
     /**
-     * Whether the model picks the right one of the two needs a headset; what a
+     * Whether the model picks the right one of the two needs a device; what a
      * test can hold is that each description still names the other, so neither can
      * be reworded into claiming the other's case.
      *

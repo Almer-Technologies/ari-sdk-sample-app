@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 object CircleState {
 
-    /** Most circles that fit legibly on a headset screen. Caps count, not numbers. */
+    /** Most circles that fit legibly on a device screen. Caps count, not numbers. */
     const val MAX_CIRCLES = 6
 
     /** Colour [add] uses when Ari sends none. Named in `add_circle`'s declaration. */

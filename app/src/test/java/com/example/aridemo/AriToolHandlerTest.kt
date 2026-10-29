@@ -2,7 +2,7 @@ package com.example.aridemo
 
 import com.ari_os.ari.sdk.AriToolErrorCode
 import com.ari_os.ari.sdk.AriToolResult
-import com.ari_os.ari.sdk.invokeToolInTest
+import com.ari_os.ari.sdk.testing.invokeToolInTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -81,8 +81,10 @@ class AriToolHandlerTest {
 
     /**
      * The other side of the test above: a failure with no honest repair carries no
-     * `fixWith` at all. Ari offers the user whatever is named, so a field filled in
-     * for the sake of filling it in points them at a tool that cannot help.
+     * `fixWith` at all. The cloud adds "Call <full tool name> to fix this, then try
+     * again." to the error the model reads, so the model may call whatever is
+     * named, and a field filled in for the sake of filling it in points it at a
+     * tool that cannot help.
      *
      * Both of the app's other failure builders are checked, because each would
      * have to be filled in separately to go wrong.

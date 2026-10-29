@@ -57,8 +57,9 @@ for f in \
 do
     [ -f "$f" ] || {
         echo "$f is missing." >&2
-        echo "sdk-repo/ is not in this repository — it comes from the RealWear" >&2
-        echo "Developer Program. Put it in the project root and run this again." >&2
+        echo "sdk-repo/ is not in this repository — download the SDK zip from" >&2
+        echo "https://rwcloudappmarketplace.blob.core.windows.net/developer/Ari-App-Tools-SDK-0.1.0.zip" >&2
+        echo "unzip it in the project root and run this again." >&2
         exit 1
     }
 done

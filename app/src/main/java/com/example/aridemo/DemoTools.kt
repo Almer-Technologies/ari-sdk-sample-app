@@ -34,10 +34,13 @@ import com.ari_os.ari.sdk.declaration.ariTools
  * it was decided or overlooked. Nothing verifies who declared it.
  *
  * `fixWith` goes the other way: exactly one failure here names one, and the rest
- * name nothing on purpose. Ari puts the named tool in front of the user, so the
- * field is only worth setting where that tool really does repair the call. See
- * [addCircle] for the one that does, and [unknownColor] and [noSuchCircle] for
- * the two that have nothing honest to offer.
+ * name nothing on purpose. Ari's cloud appends "Call <full tool name> to fix
+ * this, then try again." to the error the model reads, naming the tool by the
+ * full name the model sees (here `app__com_example_aridemo__remove_circle`), so
+ * the model may call that tool, and that tool's own `confirm` flag still applies.
+ * The field is only worth setting where that tool really does repair the call.
+ * See [addCircle] for the one that does, and [unknownColor] and [noSuchCircle]
+ * for the two that have nothing honest to offer.
  */
 object DemoTools : AriToolDeclarations {
 
@@ -105,7 +108,7 @@ object DemoTools : AriToolDeclarations {
 
         /**
          * Exists to cut a count of confirmations, not to save a round trip: both
-         * removal tools prompt, so N calls means N prompts, and on a headset
+         * removal tools prompt, so N calls means N prompts, and on a device
          * "remove all the green circles" produced two of each. Clearing `confirm`
          * would have silenced the second prompt too, and been the wrong fix — how
          * often the user is asked is a property of the tool surface.
@@ -230,7 +233,10 @@ object DemoTools : AriToolDeclarations {
      * The full-screen refusal is the one failure here worth a `fixWith`:
      * [REMOVE_CIRCLE] frees exactly the one slot this call wants, and at
      * [CircleState.MAX_CIRCLES] there is always a circle to remove, so the tool
-     * Ari offers can always run.
+     * the model is told to call can always run. The refusal carries a code, so
+     * the model reads Ari's fixed "The app cannot do that right now." with the
+     * "Call app__com_example_aridemo__remove_circle to fix this, then try again."
+     * line, not the text below.
      *
      * It does take a `number`, so the repair is a step rather than a tap. That is
      * as good as this registry gets — every removal tool takes an argument — and
@@ -302,6 +308,10 @@ object DemoTools : AriToolDeclarations {
     /**
      * Unreachable while the `color` enum's values and this resolver are the same
      * list. Kept as the backstop for a value Ari sends off-list.
+     *
+     * The failure carries a code, so Ari replaces this text with its fixed
+     * sentence ("The app could not use these details.") before the model reads
+     * it. The text is for this app's own logs and tests.
      */
     private fun unknownColor(color: String) = AriToolResult.error(
         AriToolErrorCode.INVALID_ARGUMENT,
@@ -310,8 +320,11 @@ object DemoTools : AriToolDeclarations {
     )
 
     /**
-     * Numbers are permanent and can have gaps, so naming the ones that do exist
-     * is what lets Ari and the user recover without another round trip.
+     * Numbers are permanent and can have gaps. The failure carries a code, so Ari
+     * replaces this text with its fixed sentence ("The app could not use these
+     * details.") and the model never reads the list of numbers below. That text
+     * is for this app's own logs and tests; the model recovers by calling
+     * `list_circles`.
      */
     private fun noSuchCircle(number: Int): AriToolResult {
         val active = CircleState.activeNumbers()
