@@ -230,7 +230,10 @@ what you declare tools with — `AriToolDeclarations`, `ariTools { }`,
 `AriToolAvailability`. There is a third, `com.ari_os.ari.sdk.protocol`, and most
 of it is Ari's own half of the wire, marked so that using it is a compile error.
 `AriToolsContract` lives there and is yours to read: it carries the limits your
-declaration has to fit.
+declaration has to fit. From SDK 0.1.1 there is a fourth,
+`com.ari_os.ari.sdk.testing`, which holds `invokeToolInTest`, the helper the tests
+here use to run a tool through the service. In SDK 0.1.0 it was in
+`com.ari_os.ari.sdk`, so the tests here build only against 0.1.1.
 
 **The SDK brings its own dependencies — but only one of them to your compiler.**
 `sdk-repo/` is a Maven repository, not a folder of loose files, so Gradle reads
