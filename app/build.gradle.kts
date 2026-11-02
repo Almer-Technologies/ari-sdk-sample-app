@@ -7,7 +7,7 @@ plugins {
 
     // Writes assets/ari_tools.json from DemoTools on every build. Resolved from
     // sdk-repo/, which settings.gradle.kts names under pluginManagement too.
-    id("com.ari_os.ari-tools") version "0.1.0"
+    id("com.ari_os.ari-tools") version "0.1.1"
 }
 
 android {
@@ -75,7 +75,7 @@ dependencies {
     // runtime scope, because the SDK keeps coroutines out of its public API — so
     // they are on the APK's classpath but no source here can NAME a type from
     // them through this dependency. See kotlinx-coroutines-core below.
-    implementation("com.ari_os:ari-tool-sdk:0.1.0")
+    implementation("com.ari_os:ari-tool-sdk:0.1.1")
 
     // CircleState holds its circles in a MutableStateFlow, so a main source names
     // a coroutines type and has to declare it. Without this line it still

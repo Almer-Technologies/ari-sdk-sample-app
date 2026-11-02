@@ -233,10 +233,9 @@ object DemoTools : AriToolDeclarations {
      * The full-screen refusal is the one failure here worth a `fixWith`:
      * [REMOVE_CIRCLE] frees exactly the one slot this call wants, and at
      * [CircleState.MAX_CIRCLES] there is always a circle to remove, so the tool
-     * the model is told to call can always run. The refusal carries a code, so
-     * the model reads Ari's fixed "The app cannot do that right now." with the
-     * "Call app__com_example_aridemo__remove_circle to fix this, then try again."
-     * line, not the text below.
+     * the model is told to call can always run. The host adds the sanitized
+     * explanation after its known-code text. The cloud tells the model to call
+     * the offered repair tool, whose confirmation still applies.
      *
      * It does take a `number`, so the repair is a step rather than a tap. That is
      * as good as this registry gets — every removal tool takes an argument — and
@@ -306,12 +305,8 @@ object DemoTools : AriToolDeclarations {
     }
 
     /**
-     * Unreachable while the `color` enum's values and this resolver are the same
-     * list. Kept as the backstop for a value Ari sends off-list.
-     *
-     * The failure carries a code, so Ari replaces this text with its fixed
-     * sentence ("The app could not use these details.") before the model reads
-     * it. The text is for this app's own logs and tests.
+     * The enum guides the model; the wire can still carry an off-list value.
+     * The host retains this explanation as sanitized data after its code text.
      */
     private fun unknownColor(color: String) = AriToolResult.error(
         AriToolErrorCode.INVALID_ARGUMENT,
@@ -320,11 +315,8 @@ object DemoTools : AriToolDeclarations {
     )
 
     /**
-     * Numbers are permanent and can have gaps. The failure carries a code, so Ari
-     * replaces this text with its fixed sentence ("The app could not use these
-     * details.") and the model never reads the list of numbers below. That text
-     * is for this app's own logs and tests; the model recovers by calling
-     * `list_circles`.
+     * Numbers can have gaps. The host retains the sanitized list as explanation;
+     * the model can also call `list_circles` to read the current state.
      */
     private fun noSuchCircle(number: Int): AriToolResult {
         val active = CircleState.activeNumbers()

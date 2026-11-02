@@ -2,14 +2,14 @@
 
 A minimal Android app that exposes six tools to Ari.
 
-**The Ari App Tools SDK is not in this repository.** What is here is the
+**The Ari App Tools SDK is not in this repository.** This branch requires
+unreleased 0.1.1 artifacts. What is here is the
 sample's own source, under the Apache License 2.0. The SDK and its Gradle plugin
-are proprietary RealWear software, downloaded as a zip that unpacks to a folder
-named `sdk-repo/` — unzip it into the project root and everything below works
-unchanged. See [NOTICE](NOTICE), and [Build and install](#build-and-install)
-for the download.
+are proprietary RealWear software, supplied separately in a Maven repository
+folder named `sdk-repo/`. See [NOTICE](NOTICE), and [Build and install](#build-and-install)
+for matching artifacts.
 
-Build it, install it, and say:
+With matching artifacts, build it, install it, and say:
 
 > "Hey Ari, add a blue circle"
 
@@ -69,14 +69,11 @@ all the model has to choose with.
 
 **Ari narrates before it knows.** The model often says "adding it" before reading
 the tool result, so a failure can be spoken as a success. Return the right error
-code, and don't rely on the user hearing the difference. Ari does not pass your
-error text on when the failure carries a code: it replaces it with its own fixed
-sentence for that code, such as "The app could not use these details." for
-`INVALID_ARGUMENT` or "The app cannot do that right now." for
-`TEMPORARILY_UNAVAILABLE`, before the model reads it. Only a failure with no code
-keeps its own text, flattened and cut at 300 characters. Every failure here
-carries a code, so the text in this app is for its own logs and tests; the model
-hears the fixed sentence. The same hazard has a quieter form on a *successful* call: asking
+code, and don't rely on the user hearing the difference. The host starts with
+known-code English text, then retains an optional partner explanation after
+sanitizing hidden characters and flattening whitespace. Ari rephrases the result in the user's language; the English text
+is not a promise of exact spoken words. The same hazard has a quieter form on
+a *successful* call: asking
 `remove_circles_by_color` for a colour no circle has removes nothing, which is a
 success, so the result says `"removed": 0` and the description tells the model
 what 0 means. Without that the natural narration is "removed the green ones"
@@ -91,9 +88,8 @@ applies: `remove_circle` still asks the user before it removes anything. Only na
 that really does fix it — the model acts on it, so a hopeful guess costs a turn
 and some trust. The other two failures here name nothing, which is the
 honest answer: no tool resolves a colour this app does not know. For "there's no
-circle 7" the model never sees the app's text, which lists the circles that exist;
-recovery goes through `list_circles`, which the model can call to see which
-numbers exist.
+circle 7", the explanation lists the circles that exist;
+the model can also call `list_circles` to read their current numbers.
 
 ## How it works
 
@@ -153,17 +149,44 @@ is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 
 ## Build and install
 
-**First, get `sdk-repo/`.** It is a Maven repository folder holding
-`com.ari_os:ari-tool-sdk` and `com.ari_os:ari-tool-gradle-plugin`, and it is not
-in this repository. Download the SDK zip (v0.1.0):
+**This branch requires unreleased SDK and Gradle plugin 0.1.1.** Both must
+come from the same SDK build. The public 0.1.0 zip does **not** satisfy these
+pins. Obtain a matching 0.1.1 repository from RealWear, or, with authorized
+access to the SDK feature branch, build one locally:
 
-<https://rwcloudappmarketplace.blob.core.windows.net/developer/Ari-App-Tools-SDK-0.1.0.zip>
+At SDK commit `251b4549f`, the version catalog still says 0.1.0. For this
+local compatibility build, save this init script outside either repository as
+`/tmp/ari-local-011.init.gradle`. It overrides publication coordinates only:
 
-It unzips to a single `sdk-repo/` folder. Unzip it in the project root, so that
-`sdk-repo/` sits beside `settings.gradle.kts`. (The partner archive described
-below already contains it.) Without the folder the build stops at the settings
-script and tells you it is missing; nothing else here needs changing once it is
-in place.
+```groovy
+gradle.projectsEvaluated {
+    [':libs:ari-tool-sdk', ':libs:ari-tool-gradle-plugin'].each { path ->
+        def target = gradle.rootProject.findProject(path)
+        if (target == null) return
+        target.version = '0.1.1'
+        target.publishing.publications.withType(org.gradle.api.publish.maven.MavenPublication).configureEach {
+            version = '0.1.1'
+        }
+    }
+}
+```
+
+```bash
+# Run inside the SDK repository at 251b4549f.
+# SAMPLE_ROOT is the absolute path to this sample checkout.
+./gradlew -I /tmp/ari-local-011.init.gradle :libs:ari-tool-sdk:publishToMavenLocal \
+  :libs:ari-tool-gradle-plugin:publishToMavenLocal \
+  -Dmaven.repo.local="$SAMPLE_ROOT/sdk-repo"
+```
+
+Use JDK 21 and the SDK repository's Android SDK setup. These publication tasks
+write the AAR, plugin JAR, plugin marker and Maven metadata into `sdk-repo/`
+beside this sample's `settings.gradle.kts`. Record the SDK commit, build command
+and artifact checksums in ignored `sdk-repo/BUILT_FROM.txt`. Keep this repository
+private to your local build; never commit its contents or publish these binaries.
+The existing public 0.1.0 download remains unchanged.
+
+Then, from this sample:
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -218,9 +241,9 @@ does not need it.)
 maven { url = uri(settingsDir.resolve("sdk-repo")) }
 
 // app/build.gradle.kts
-plugins { id("com.ari_os.ari-tools") version "0.1.0" }
+plugins { id("com.ari_os.ari-tools") version "0.1.1" }
 ariTools { declarations = "com.example.myapp.MyTools" }
-dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.0") }
+dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.1") }
 ```
 
 What you import sits in two packages. `com.ari_os.ari.sdk.declaration` holds
@@ -230,8 +253,8 @@ what you declare tools with — `AriToolDeclarations`, `ariTools { }`,
 `AriToolAvailability`. There is a third, `com.ari_os.ari.sdk.protocol`, and most
 of it is Ari's own half of the wire, marked so that using it is a compile error.
 `AriToolsContract` lives there and is yours to read: it carries the limits your
-declaration has to fit. From SDK 0.1.1 there is a fourth,
-`com.ari_os.ari.sdk.testing`, which holds `invokeToolInTest`, the helper the tests
+declaration has to fit. A fourth package,
+`com.ari_os.ari.sdk.testing`, holds `invokeToolInTest`, the helper the tests
 here use to run a tool through the service. In SDK 0.1.0 it was in
 `com.ari_os.ari.sdk`, so the tests here build only against 0.1.1.
 
@@ -267,6 +290,10 @@ or the stubbed `android.jar` throws instead of returning defaults, and
 `BUILT_FROM.txt`, which comes inside `sdk-repo/`, records which build the AAR and
 the plugin came from. When the RealWear Maven repository exists, `sdk-repo/`
 becomes its URL and nothing else above changes.
+
+Tool `timeout` takes a Kotlin `Duration`, for example `timeout = 30.seconds`
+with `import kotlin.time.Duration.Companion.seconds`. This sample uses the SDK
+default and needs no explicit timeout. The generated JSON still uses `timeoutMs`.
 
 ## Troubleshooting
 

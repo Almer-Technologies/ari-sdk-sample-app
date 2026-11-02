@@ -46,7 +46,7 @@ dependencyResolutionManagement {
 // contain it. Say so here, while the two repository lists are still the subject,
 // rather than letting the build die later on
 //
-//     Plugin [id: 'com.ari_os.ari-tools', version: '0.1.0'] was not found
+//     Plugin [id: 'com.ari_os.ari-tools', version: '0.1.1'] was not found
 //
 // which reads like a broken build script rather than a missing download.
 require(settingsDir.resolve("sdk-repo").isDirectory) {
@@ -61,12 +61,9 @@ require(settingsDir.resolve("sdk-repo").isDirectory) {
         com.ari_os:ari-tool-gradle-plugin
 
     — are proprietary RealWear software and are not distributed here. They
-    come as a zip that unpacks to a folder named sdk-repo/, a Maven repository
-    in ordinary layout. Download it from
-
-        https://rwcloudappmarketplace.blob.core.windows.net/developer/Ari-App-Tools-SDK-0.1.0.zip
-
-    and unzip it in the project root, so that the folder is at
+    require matching unreleased 0.1.1 artifacts. The public 0.1.0 zip cannot
+    satisfy this branch. Obtain 0.1.1 from RealWear or use the authorized SDK
+    local publication recipe in README.md, "Build and install", targeting
 
         ${settingsDir.resolve("sdk-repo")}
 

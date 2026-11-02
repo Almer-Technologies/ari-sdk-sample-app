@@ -20,8 +20,8 @@ import org.junit.Test
  * Every tool this app declares, run end to end.
  *
  * `invokeToolInTest` enters [AriToolService] through the same binder Ari calls,
- * so each of these covers the permission gate, the argument parsing, the handler
- * and the error envelope over one code path. The other test classes stop at the
+ * so each of these covers the binder entry, the argument parsing, the handler
+ * and the result JSON over one code path. The other test classes stop at the
  * declaration — [AriToolServiceTest] reads the registry and [CircleDeeplinkTest]
  * checks the manifest against it — so neither would notice `add_circle`
  * returning the wrong number.
@@ -116,7 +116,7 @@ class AriToolHandlerTest {
 
     /**
      * `number` is required, so the SDK turns a missing value into the coded
-     * envelope that lets Ari ask the model again. The app writes no message.
+     * result that lets Ari ask the model again. The app writes no message.
      */
     @Test
     fun `remove_circle without its required argument names the argument`() {
@@ -229,7 +229,7 @@ class AriToolHandlerTest {
 
     /**
      * Nothing in the SDK checks a value against an `enum` arg's `values`, so
-     * `unknownColor` in [AriToolService] is a reachable backstop, not dead code.
+     * `unknownColor` in [DemoTools] is a reachable backstop, not dead code.
      */
     @Test
     fun `a colour outside the declared list is the app's own refusal`() {
