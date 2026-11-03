@@ -21,8 +21,8 @@ import org.junit.Test
  *
  * `invokeToolInTest` enters [AriToolService] through the same binder Ari calls,
  * so each of these covers the binder entry, the argument parsing, the handler
- * and the result JSON over one code path. The other test classes stop at the
- * declaration — [AriToolServiceTest] reads the registry and [CircleDeeplinkTest]
+ * and the result JSON over one code path. The declaration tests stop short of
+ * that — [AriToolServiceTest] reads the registry and [CircleDeeplinkTest]
  * checks the manifest against it — so neither would notice `add_circle`
  * returning the wrong number.
  *
@@ -63,6 +63,32 @@ class AriToolHandlerTest {
     }
 
     /**
+     * The enum guides the model but nothing on the wire enforces it, so a colour
+     * the app cannot draw has to be refused before a circle is added for it.
+     */
+    @Test
+    fun `add_circle refuses a colour outside the declared list and adds nothing`() {
+        val failure = failure(invoke("add_circle", """{"color":"cerulean"}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertTrue(failure.message, "cerulean" in failure.message.orEmpty())
+        assertEquals(listOf(1), CircleState.activeNumbers())
+    }
+
+    /**
+     * Arguments the SDK cannot parse never reach a handler: the SDK refuses them
+     * itself, so no handler has to cope with a half-read call.
+     */
+    @Test
+    fun `arguments that are not JSON are refused before anything is added`() {
+        val failure = failure(invoke("add_circle", "{not json"))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("the app cannot read these arguments", failure.message)
+        assertEquals(listOf(1), CircleState.activeNumbers())
+    }
+
+    /**
      * `temporarily_unavailable` is the code that tells Ari a retry works once one
      * is removed, and `fixWith` names the tool that makes it work. Both halves are
      * asserted: the code alone leaves Ari guessing which tool to offer, and a
@@ -77,6 +103,25 @@ class AriToolHandlerTest {
         assertEquals(AriToolErrorCode.TEMPORARILY_UNAVAILABLE.wireValue, failure.code)
         assertTrue(failure.message, "${CircleState.MAX_CIRCLES}" in failure.message.orEmpty())
         assertEquals("remove_circle", failure.fixWith)
+    }
+
+    /**
+     * Naming a repair is a promise that it works, so this follows it through:
+     * after the one removal `fixWith` points at, the same call succeeds. The new
+     * circle gets a fresh number rather than the freed one, or the model's last
+     * `list_circles` would name the wrong circle.
+     */
+    @Test
+    fun `the repair add_circle names at the limit makes the next add_circle succeed`() {
+        repeat(CircleState.MAX_CIRCLES - 1) { ok(invoke("add_circle")) }
+        val full = failure(invoke("add_circle"))
+        assertEquals("remove_circle", full.fixWith)
+
+        ok(invoke(full.fixWith!!, """{"number":3}"""))
+        val payload = ok(invoke("add_circle"))
+
+        assertEquals(CircleState.MAX_CIRCLES + 1, payload.int("number"))
+        assertEquals(CircleState.MAX_CIRCLES, payload.int("total"))
     }
 
     /**
@@ -126,6 +171,19 @@ class AriToolHandlerTest {
         assertEquals("arg 'number' is missing", failure.message)
     }
 
+    /**
+     * The strict accessor refuses text where an int was declared, so a model
+     * that spells the number out cannot remove a circle by accident.
+     */
+    @Test
+    fun `remove_circle with a number that is not a number names the argument`() {
+        val failure = failure(invoke("remove_circle", """{"number":"two"}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("arg 'number' is not an int", failure.message)
+        assertEquals(listOf(1), CircleState.activeNumbers())
+    }
+
     /** Numbers have gaps, so "no such circle" has to say which ones there are. */
     @Test
     fun `remove_circle of a number that is not there names the ones that are`() {
@@ -133,6 +191,23 @@ class AriToolHandlerTest {
 
         assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
         assertEquals("There's no circle 7. The circles are 1.", failure.message)
+    }
+
+    /**
+     * An empty list would read "The circles are ." — so an empty screen gets its
+     * own sentence, from both tools that look a circle up by number.
+     */
+    @Test
+    fun `a circle looked up on an empty screen is refused as no circles at all`() {
+        ok(invoke("remove_circle", """{"number":1}"""))
+
+        val remove = failure(invoke("remove_circle", """{"number":1}"""))
+        val recolour = failure(invoke("set_circle_color", """{"color":"blue","number":1}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, remove.code)
+        assertEquals("There are no circles on screen.", remove.message)
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, recolour.code)
+        assertEquals("There are no circles on screen.", recolour.message)
     }
 
     /**
@@ -227,6 +302,40 @@ class AriToolHandlerTest {
         )
     }
 
+    /** "Change circle 3 to yellow" must leave every other circle as it was. */
+    @Test
+    fun `set_circle_color with a number recolours only that circle`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val payload = ok(invoke("set_circle_color", """{"color":"yellow","number":3}"""))
+
+        assertEquals("yellow", payload.string("color"))
+        assertEquals(1, payload.int("changed"))
+        assertEquals(
+            listOf("red", "green", "yellow"),
+            CircleState.circles.value.map { circle -> circle.colorName },
+        )
+    }
+
+    /**
+     * Same refusal as `remove_circle`, so the model reads one shape for "no
+     * such circle" whichever tool it called.
+     */
+    @Test
+    fun `set_circle_color of a number that is not there names the ones that are`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+
+        val failure = failure(invoke("set_circle_color", """{"color":"blue","number":9}"""))
+
+        assertEquals(AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+        assertEquals("There's no circle 9. The circles are 1, 2.", failure.message)
+        assertEquals(
+            listOf("red", "green"),
+            CircleState.circles.value.map { circle -> circle.colorName },
+        )
+    }
+
     /**
      * Nothing in the SDK checks a value against an `enum` arg's `values`, so
      * `unknownColor` in [DemoTools] is a reachable backstop, not dead code.
@@ -258,6 +367,21 @@ class AriToolHandlerTest {
     }
 
     /**
+     * An empty screen is still an answer, with the same shape: the model reads
+     * `circles` as an object whatever it holds.
+     */
+    @Test
+    fun `list_circles on an empty screen reports none`() {
+        ok(invoke("remove_circle", """{"number":1}"""))
+
+        val payload = ok(invoke("list_circles"))
+
+        assertEquals(0, payload.int("total"))
+        val circles = JSONObject(payload.toString()).getJSONObject("circles")
+        assertEquals(0, circles.length())
+    }
+
+    /**
      * The SDK answers from the registry, so a stale tool in Ari's view cannot
      * reach a handler that no longer exists.
      */
@@ -270,8 +394,8 @@ class AriToolHandlerTest {
 
     /**
      * Invoking a deeplink tool is Ari's mistake, not the model's, so the SDK says
-     * `internal_error` rather than reporting a missing tool. This is all a JVM
-     * test can say about the deeplink path — the screen it opens needs a device.
+     * `internal_error` rather than reporting a missing tool. This is the service's
+     * half of the deeplink path; the screen the link opens is [MainActivityTest].
      */
     @Test
     fun `invoking the deeplink tool reports internal_error rather than running anything`() {

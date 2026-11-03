@@ -148,7 +148,9 @@ tells this app that pair drifted apart — if the filter stops matching, Ari ope
 nothing, logs a warning under `AppToolLauncher`, and the model reads "The app
 cannot do that right now." — so `CircleDeeplink.kt` holds
 the template as one constant both ends read, and `CircleDeeplinkTest` parses
-`AndroidManifest.xml` off disk to check the filter still agrees. Three things
+`AndroidManifest.xml` off disk to check the filter still agrees, while
+`MainActivityTest` resolves the filled link under Robolectric and checks the
+banner the screen shows for it. Three things
 there are easy to get wrong, and the test comments say why: `CATEGORY_DEFAULT`
 is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 `launchMode="singleTask"`.
@@ -209,6 +211,9 @@ of `sdk-repo/` on disk. To run every check:
 ```bash
 ./gradlew :app:testDebugUnitTest
 ```
+
+For line and branch coverage, `./gradlew :app:koverHtmlReportDebug` runs the
+same tests and writes the report to `app/build/reports/kover/htmlDebug/index.html`.
 
 `scripts/package-release.sh` builds the partner archive,
 `build/dist/ari-tool-sample-<version>.zip`, taking the version from
@@ -348,9 +353,9 @@ one confirmation, and `show_circle` opening `aridemo://circle/3` with no bind.
 Still **not** exercised on hardware: `cancel()` and `AriToolAvailability.set`,
 the oversize caps on results and arguments, declaration version skew, saying no
 at a confirmation, an invalid enum value, the seventh-circle limit and the
-`fixWith` it now returns, and Android 16 background-launch rules. The permission
-gate is the one thing no JVM test here can cover either: the stubbed
-`android.jar` makes it a no-op.
+`fixWith` it now returns, and Android 16 background-launch rules. No test here
+exercises the permission gate either: the handler tests run against the stubbed
+`android.jar`, where it is a no-op.
 
 Two caveats on that run, and they have grown. It predates the generated asset.
 It also predates the current AAR: the device ran an earlier SDK build than the

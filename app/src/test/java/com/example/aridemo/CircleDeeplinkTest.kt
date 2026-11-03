@@ -26,8 +26,9 @@ private fun Element.elements(tag: String): List<Element> =
  * the parser and the manifest is checked here, at build time, or not at all.
  *
  * The manifest is parsed off disk with the JDK's XML reader, so this proves the
- * filter is **declared** to match. It does not prove Android resolves it, which
- * needs a device; see "Not verified on hardware".
+ * filter is **declared** to match. [MainActivityTest] also resolves the filled
+ * link through Robolectric's package manager. Neither is a device; see
+ * "Verified on hardware" in the README.
  */
 class CircleDeeplinkTest {
 
@@ -53,6 +54,17 @@ class CircleDeeplinkTest {
         assertNull(CircleDeeplink.circleNumber("other://circle/3"))
         assertNull(CircleDeeplink.circleNumber("aridemo://square/3"))
         assertNull(CircleDeeplink.circleNumber("aridemo://circle/3/extra"))
+    }
+
+    /**
+     * Ari fills the template and adds nothing, so anything after the number
+     * means something else built the link. The whole link must match, not a
+     * prefix of it.
+     */
+    @Test
+    fun `a link with a query or fragment is not ours`() {
+        assertNull(CircleDeeplink.circleNumber("aridemo://circle/3?x=1"))
+        assertNull(CircleDeeplink.circleNumber("aridemo://circle/3#x"))
     }
 
     /**

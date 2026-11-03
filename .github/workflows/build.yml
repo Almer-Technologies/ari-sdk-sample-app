@@ -36,9 +36,11 @@
 #
 # WHAT NOTHING HERE COVERS: the device. No emulator, no hardware. The
 # permission gate is a no-op under the android unit-test jar, and the deeplink
-# half of the sample stops at the manifest: CircleDeeplinkTest proves the
-# filter is DECLARED to match the uri show_circle declares, not that Android
-# resolves it. See "Verified on hardware" in the README.
+# half of the sample stops short of a device: CircleDeeplinkTest proves the
+# filter is DECLARED to match the uri show_circle declares, and MainActivityTest
+# resolves that uri through Robolectric's package manager and checks the
+# screen's banner. Neither is Android on a device. See "Verified on hardware"
+# in the README.
 #
 # RUNNER: ubuntu-latest, a hosted runner. This build needs a JDK and an Android
 # SDK and nothing else — no signing keys, no emulator, no Xcode, no

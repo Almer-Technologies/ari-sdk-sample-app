@@ -124,4 +124,54 @@ class AriToolServiceTest {
         assertTrue(CircleState.colorOf(CircleState.DEFAULT_COLOR) != null)
         assertTrue(CircleState.DEFAULT_COLOR in CircleState.supportedNames())
     }
+
+    /**
+     * The SDK checks that a declaration is well formed, not that it is the one
+     * the handlers were written for. `required` is what lets a handler use the
+     * strict accessor, so a flag dropped from `remove_circle`'s `number` would
+     * tell the model it may leave the number out, and every call that does
+     * would fail at the accessor with invalid_argument instead of being sent
+     * correctly. And the optional `number` on `set_circle_color` is what makes
+     * "recolour every circle" reachable at all: marked required, the model could
+     * never leave it out.
+     */
+    @Test
+    fun `each tool takes exactly these arguments, with this type and required flag`() {
+        assertEquals(
+            mapOf(
+                "add_circle" to listOf("color enum optional"),
+                "remove_circle" to listOf("number int required"),
+                "remove_circles_by_color" to listOf("color enum required"),
+                "set_circle_color" to listOf("color enum required", "number int optional"),
+                "list_circles" to emptyList(),
+                "show_circle" to listOf("number int required"),
+            ),
+            registry.declarations.associate { tool ->
+                tool.name to tool.args.map { arg -> describe(arg) }
+            },
+        )
+    }
+
+    /**
+     * The SDK defaults an argument's description to "" and accepts it, but the
+     * model picks each value from that text alone — a blank one leaves it
+     * guessing what `number` means.
+     */
+    @Test
+    fun `every argument says what it is for`() {
+        registry.declarations.forEach { tool ->
+            tool.args.forEach { arg ->
+                assertTrue("${tool.name}.${arg.name} has no description", arg.description.isNotBlank())
+            }
+        }
+    }
+
+    private fun describe(arg: AriToolArg): String {
+        val type = when (arg) {
+            is AriToolArg.EnumArg -> "enum"
+            is AriToolArg.IntArg -> "int"
+            else -> arg::class.simpleName
+        }
+        return "${arg.name} $type ${if (arg.required) "required" else "optional"}"
+    }
 }
