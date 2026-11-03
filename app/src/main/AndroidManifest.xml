@@ -29,9 +29,11 @@
               binds the service for it: it fills `aridemo://circle/{number}`
               from the argument and fires it as ACTION_VIEW on this package.
               This filter is the only reason anything happens. Without it
-              Android drops the intent and the user sees nothing — no error
-              reaches this app, which is why `CircleDeeplinkTest` checks the
-              filter against `CircleDeeplink`'s constants at build time.
+              Ari finds no matching activity, opens nothing and logs a warning
+              under `AppToolLauncher`, and the model tells the user "The app
+              cannot do that right now." This app is never told, which is why
+              `CircleDeeplinkTest` checks the filter against `CircleDeeplink`'s
+              constants at build time.
 
               CATEGORY_DEFAULT is required: startActivity adds it to every
               implicit intent, and a filter without it matches nothing.

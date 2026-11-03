@@ -57,8 +57,9 @@ for f in \
 do
     [ -f "$f" ] || {
         echo "$f is missing." >&2
-        echo "sdk-repo/ is not in this repository — it comes from the RealWear" >&2
-        echo "Developer Program. Put it in the project root and run this again." >&2
+        echo "sdk-repo/ is not in this repository — obtain matching SDK and plugin 0.1.1 artifacts; see" >&2
+        echo "README.md: Build and install (the public 0.1.0 zip is incompatible)" >&2
+        echo "place sdk-repo/ in the project root and run this again." >&2
         exit 1
     }
 done

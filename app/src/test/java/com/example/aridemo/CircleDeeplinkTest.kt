@@ -19,14 +19,16 @@ private fun Element.elements(tag: String): List<Element> =
  * The `show_circle` deeplink, checked across all three places it is written.
  *
  * A deeplink is the one kind of tool Ari runs without this app's code, so nothing
- * at runtime reports it broken: if the `<intent-filter>` does not match, Android
- * drops the intent and the user sees nothing happen — no error, no log. So the
- * agreement between the declared template, the parser and the manifest is checked
- * here, at build time, or not at all.
+ * at runtime tells it that it is broken: if the `<intent-filter>` does not match,
+ * Ari finds no matching activity, opens nothing and logs a warning under
+ * `AppToolLauncher`, and the model tells the user "The app cannot do that right
+ * now." The app is never told. So the agreement between the declared template,
+ * the parser and the manifest is checked here, at build time, or not at all.
  *
  * The manifest is parsed off disk with the JDK's XML reader, so this proves the
- * filter is **declared** to match. It does not prove Android resolves it, which
- * needs a device; see "Not verified on hardware".
+ * filter is **declared** to match. [MainActivityTest] also resolves the filled
+ * link through Robolectric's package manager. Neither is a device; see
+ * "Verified on hardware" in the README.
  */
 class CircleDeeplinkTest {
 
@@ -52,6 +54,17 @@ class CircleDeeplinkTest {
         assertNull(CircleDeeplink.circleNumber("other://circle/3"))
         assertNull(CircleDeeplink.circleNumber("aridemo://square/3"))
         assertNull(CircleDeeplink.circleNumber("aridemo://circle/3/extra"))
+    }
+
+    /**
+     * Ari fills the template and adds nothing, so anything after the number
+     * means something else built the link. The whole link must match, not a
+     * prefix of it.
+     */
+    @Test
+    fun `a link with a query or fragment is not ours`() {
+        assertNull(CircleDeeplink.circleNumber("aridemo://circle/3?x=1"))
+        assertNull(CircleDeeplink.circleNumber("aridemo://circle/3#x"))
     }
 
     /**

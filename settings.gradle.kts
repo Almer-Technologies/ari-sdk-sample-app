@@ -5,7 +5,7 @@ pluginManagement {
         // again under dependencyResolutionManagement, and neither is redundant.
         //
         // sdk-repo/ is NOT part of this repository: it is proprietary RealWear
-        // software, supplied separately (see NOTICE). Registered only when it is
+        // software, downloaded separately (see NOTICE). Registered only when it is
         // present, so the repository list never advertises a directory that is
         // not there; the check below reports the absence in one sentence.
         val sdkRepo = settingsDir.resolve("sdk-repo")
@@ -46,7 +46,7 @@ dependencyResolutionManagement {
 // contain it. Say so here, while the two repository lists are still the subject,
 // rather than letting the build die later on
 //
-//     Plugin [id: 'com.ari_os.ari-tools', version: '0.1.0'] was not found
+//     Plugin [id: 'com.ari_os.ari-tools', version: '0.1.1'] was not found
 //
 // which reads like a broken build script rather than a missing download.
 require(settingsDir.resolve("sdk-repo").isDirectory) {
@@ -61,10 +61,9 @@ require(settingsDir.resolve("sdk-repo").isDirectory) {
         com.ari_os:ari-tool-gradle-plugin
 
     — are proprietary RealWear software and are not distributed here. They
-    arrive as a folder named sdk-repo/, a Maven repository in ordinary layout,
-    from the RealWear Developer Program. Contact info@realwear.com to obtain it.
-
-    Put the folder at
+    require matching unreleased 0.1.1 artifacts. The public 0.1.0 zip cannot
+    satisfy this branch. Obtain 0.1.1 from RealWear or use the authorized SDK
+    local publication recipe in README.md, "Build and install", targeting
 
         ${settingsDir.resolve("sdk-repo")}
 

@@ -2,14 +2,14 @@
 
 A minimal Android app that exposes six tools to Ari.
 
-**The Ari App Tools SDK is not in this repository.** What is here is the
+**The Ari App Tools SDK is not in this repository.** This branch requires
+unreleased 0.1.1 artifacts. What is here is the
 sample's own source, under the Apache License 2.0. The SDK and its Gradle plugin
-are proprietary RealWear software and come from the RealWear Developer Program
-as a folder named `sdk-repo/` — drop that folder into the project root and
-everything below works unchanged. See [NOTICE](NOTICE), and
-[Build and install](#build-and-install) for what to do if you don't have it yet.
+are proprietary RealWear software, supplied separately in a Maven repository
+folder named `sdk-repo/`. See [NOTICE](NOTICE), and [Build and install](#build-and-install)
+for matching artifacts.
 
-Build it, install it, and say:
+With matching artifacts, build it, install it, and say:
 
 > "Hey Ari, add a blue circle"
 
@@ -54,7 +54,7 @@ has just asked for a circle says yes to being asked again.
 
 **One tool call, one confirmation — so model the plural intent as a tool.**
 Both removal tools declare `confirm = true`, so N calls means N prompts. This app
-learned that on a headset: "remove all the green circles" produced two parallel
+learned that on a device: "remove all the green circles" produced two parallel
 `remove_circle` calls, and the user had to say yes twice. The fix is not in the
 confirmation layer, it is in the tool surface — `remove_circles_by_color` makes
 the plural intent one call, and therefore one prompt. Look for the phrasing your
@@ -68,21 +68,30 @@ Both descriptions then carry the boundary between the two, because that text is
 all the model has to choose with.
 
 **Ari narrates before it knows.** The model often says "adding it" before reading
-the tool result, so a failure can be spoken as a success. Return precise error
-text — Ari reads it out — and don't rely on the user hearing the difference. The
-same hazard has a quieter form on a *successful* call: asking
+the tool result, so a failure can be spoken as a success. Return the right error
+code, and don't rely on the user hearing the difference. From the Ari release
+after 2.5.4366, the host starts with known-code English text, then retains an
+optional partner explanation ("The app said: ...") after sanitizing hidden
+characters and flattening whitespace. Ari 2.5.4366 drops the partner text, and
+the model hears only the fixed sentence. Ari rephrases the result in the user's
+language; the English text is not a promise of exact spoken words. The same hazard has a quieter form on
+a *successful* call: asking
 `remove_circles_by_color` for a colour no circle has removes nothing, which is a
 success, so the result says `"removed": 0` and the description tells the model
 what 0 means. Without that the natural narration is "removed the green ones"
 when there never were any.
 
 Where another of your tools genuinely repairs the failure, name it. `add_circle`
-at the six-circle limit returns `fixWith = "remove_circle"`, and Ari offers that
-tool to the user. Only name one
-that really does fix it — Ari puts it in front of them, so a hopeful guess costs
-a turn and some trust. The other two failures here name nothing, which is the
-honest answer: no tool resolves a colour this app does not know, and "there's no
-circle 7" already lists the circles that exist.
+at the six-circle limit returns `fixWith = "remove_circle"`. Ari's cloud appends
+"Call app__com_example_aridemo__remove_circle to fix this, then try again." to
+the error the model reads, naming the tool by the full name the model sees, so
+the model may call that tool next. The fix tool's own `confirm` flag still
+applies: `remove_circle` still asks the user before it removes anything. Only name one
+that really does fix it — the model acts on it, so a hopeful guess costs a turn
+and some trust. The other two failures here name nothing, which is the
+honest answer: no tool resolves a colour this app does not know. For "there's no
+circle 7", the explanation lists the circles that exist;
+the model can also call `list_circles` to read their current numbers.
 
 ## How it works
 
@@ -114,9 +123,10 @@ declaration may therefore **name** an Android type — `supportedNames()` reads 
 map of Compose `Color`, a value class over a `ULong` — but must not **call** a
 framework method. Keep those in the handlers; the generator names the cause.
 
-At session start Ari opens that asset straight out of this app's installed APK —
-no IPC, no app launch — and tells the cloud the tools exist. When you ask for
-one, the call arrives over AIDL and the SDK dispatches it to the `handle { }`
+Ari opens that asset straight out of this app's installed APK — no IPC, no app
+launch — when Ari starts and on each package change, and tells the cloud the
+tools exist. A voice session takes a snapshot of what Ari read when the session
+starts. When you ask for one, the call arrives over AIDL and the SDK dispatches it to the `handle { }`
 block declared with that tool.
 
 Every rule a declaration has to satisfy runs as `ariTools { }` builds the
@@ -126,28 +136,66 @@ argument fails `:app:assembleDebug` rather than going quiet. What can still
 vanish without a word is version skew: an Ari older than an argument type
 refuses that value and drops the one tool using it. The file's
 `declarationVersion` deliberately stays put when a type is added, so your other
-tools keep loading.
+tools keep loading. The rules only the cloud checks also fail silently, for
+example the application ID pattern: it must start with a lowercase letter,
+then lowercase letters, digits, underscores and dots, at most 128 characters.
+The cloud then drops every tool of the app.
 
 `show_circle` is the exception. It is a **deeplink tool**: a `uri` and no
 handler, so Ari never binds the service and this app's process is never started
 for it. Its code is an `<intent-filter>` and `MainActivity`. Nothing at runtime
-reports that pair drifting apart — if the filter stops matching, Android drops
-the intent and the user just sees nothing happen — so `CircleDeeplink.kt` holds
+tells this app that pair drifted apart — if the filter stops matching, Ari opens
+nothing, logs a warning under `AppToolLauncher`, and the model reads "The app
+cannot do that right now." — so `CircleDeeplink.kt` holds
 the template as one constant both ends read, and `CircleDeeplinkTest` parses
-`AndroidManifest.xml` off disk to check the filter still agrees. Three things
+`AndroidManifest.xml` off disk to check the filter still agrees, while
+`MainActivityTest` resolves the filled link under Robolectric and checks the
+banner the screen shows for it. Three things
 there are easy to get wrong, and the test comments say why: `CATEGORY_DEFAULT`
 is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 `launchMode="singleTask"`.
 
 ## Build and install
 
-**First, get `sdk-repo/`.** It is a Maven repository folder holding
-`com.ari_os:ari-tool-sdk` and `com.ari_os:ari-tool-gradle-plugin`, and it is not
-distributed in this repository — it comes from the RealWear Developer Program
-(`info@realwear.com`), either on its own or inside the partner archive described
-below. Put it in the project root, beside `settings.gradle.kts`. Without it the
-build stops at the settings script and tells you the folder is missing; nothing
-else here needs changing once it is in place.
+**This branch requires unreleased SDK and Gradle plugin 0.1.1.** Both must
+come from the same SDK build. The public 0.1.0 zip does **not** satisfy these
+pins. This branch stays a draft and merges together with the SDK 0.1.1 release.
+Obtain a matching 0.1.1 repository from RealWear, or, with authorized
+access to the SDK feature branch, build one locally:
+
+At SDK commit `2bb5084bf`, the version catalog still says 0.1.0. For this
+local compatibility build, save this init script outside either repository as
+`/tmp/ari-local-011.init.gradle`. It overrides publication coordinates only:
+
+```groovy
+gradle.projectsEvaluated {
+    [':libs:ari-tool-sdk', ':libs:ari-tool-gradle-plugin'].each { path ->
+        def target = gradle.rootProject.findProject(path)
+        if (target == null) return
+        target.version = '0.1.1'
+        target.publishing.publications.withType(org.gradle.api.publish.maven.MavenPublication).configureEach {
+            version = '0.1.1'
+        }
+    }
+}
+```
+
+```bash
+# Run inside the SDK repository at 2bb5084bf.
+# SAMPLE_ROOT is the absolute path to this sample checkout.
+./gradlew -I /tmp/ari-local-011.init.gradle :libs:ari-tool-sdk:publishToMavenLocal \
+  :libs:ari-tool-gradle-plugin:publishToMavenLocal \
+  -Dmaven.repo.local="$SAMPLE_ROOT/sdk-repo"
+```
+
+Use JDK 21 and the SDK repository's Android SDK setup. These publication tasks
+write the AAR, plugin JAR, plugin marker and Maven metadata into `sdk-repo/`
+beside this sample's `settings.gradle.kts`. Record the SDK commit, build command
+and artifact checksums in ignored `sdk-repo/BUILT_FROM.txt`. Keep this repository
+private to your local build; never commit its contents or publish these binaries.
+The existing public 0.1.0 download remains unchanged.
+
+Then, from this sample:
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -163,6 +211,9 @@ of `sdk-repo/` on disk. To run every check:
 ```bash
 ./gradlew :app:testDebugUnitTest
 ```
+
+For line and branch coverage, `./gradlew :app:koverHtmlReportDebug` runs the
+same tests and writes the report to `app/build/reports/kover/htmlDebug/index.html`.
 
 `scripts/package-release.sh` builds the partner archive,
 `build/dist/ari-tool-sample-<version>.zip`, taking the version from
@@ -182,7 +233,8 @@ so a green run proves the sample works against *the AAR that was supplied* — t
 exact artifact you get.
 
 On the device, the **Ari app must be installed** — it defines the permission
-this app's service requires. Discovery runs when a voice session **starts**, so
+this app's service requires. Ari reads declarations when it starts and on each
+package change, and a voice session takes a snapshot when it **starts**, so
 installing this app mid-conversation leaves it invisible: restart the session.
 
 ## Pointing your own project at the SDK
@@ -201,9 +253,9 @@ does not need it.)
 maven { url = uri(settingsDir.resolve("sdk-repo")) }
 
 // app/build.gradle.kts
-plugins { id("com.ari_os.ari-tools") version "0.1.0" }
+plugins { id("com.ari_os.ari-tools") version "0.1.1" }
 ariTools { declarations = "com.example.myapp.MyTools" }
-dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.0") }
+dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.1") }
 ```
 
 What you import sits in two packages. `com.ari_os.ari.sdk.declaration` holds
@@ -213,7 +265,10 @@ what you declare tools with — `AriToolDeclarations`, `ariTools { }`,
 `AriToolAvailability`. There is a third, `com.ari_os.ari.sdk.protocol`, and most
 of it is Ari's own half of the wire, marked so that using it is a compile error.
 `AriToolsContract` lives there and is yours to read: it carries the limits your
-declaration has to fit.
+declaration has to fit. A fourth package,
+`com.ari_os.ari.sdk.testing`, holds `invokeToolInTest`, the helper the tests
+here use to run a tool through the service. In SDK 0.1.0 it was in
+`com.ari_os.ari.sdk`, so the tests here build only against 0.1.1.
 
 **The SDK brings its own dependencies — but only one of them to your compiler.**
 `sdk-repo/` is a Maven repository, not a folder of loose files, so Gradle reads
@@ -242,29 +297,48 @@ unaffected — the SDK's own `minSdk` is 30.
 Two more settings, needed only if you unit-test your `AriToolProviderService`
 subclass on the JVM: `testOptions { unitTests.isReturnDefaultValues = true }`,
 or the stubbed `android.jar` throws instead of returning defaults, and
-`testImplementation("org.json:json:...")`, or a result comes back empty.
+`testImplementation("org.json:json:...")`, or `invokeToolInTest` throws `IllegalStateException` ("reported no result").
 
 `BUILT_FROM.txt`, which comes inside `sdk-repo/`, records which build the AAR and
 the plugin came from. When the RealWear Maven repository exists, `sdk-repo/`
 becomes its URL and nothing else above changes.
 
+Tool `timeout` takes a Kotlin `Duration`, for example `timeout = 30.seconds`
+with `import kotlin.time.Duration.Companion.seconds`. This sample uses the SDK
+default and needs no explicit timeout. The generated JSON still uses `timeoutMs`.
+
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
-| Ari says it can't change colours | Discovery ran before this app was installed. Restart the session. |
-| A tool you added in code never appears | The installed APK predates it, or discovery ran before you reinstalled. Rebuild, reinstall, restart the session. |
+| Ari says it can't change colours | The session's snapshot was taken before this app was installed. Restart the session. If it still fails, look for a `Skipping` or `dropped` warning for this app (see the log command below). |
+| A tool you added in code never appears | The installed APK predates it, or the session's snapshot was taken before you reinstalled. Rebuild, reinstall, restart the session. A `dropped` warning for the tool says why Ari refused it. |
 | The build says reading your declarations called an Android framework method | A tool declaration called into the framework. Only a `handle { }` may. |
-| `show_circle` does nothing at all, with no error anywhere | The `<intent-filter>` does not match the uri Ari built. Android drops an unmatched intent silently and your app is never told. |
+| `show_circle` opens nothing, and Ari says "The app cannot do that right now." | The `<intent-filter>` does not match the uri Ari built. Ari looks for an activity in this package first; when none matches it opens nothing, logs `Ari opened no screen: no activity of com.example.aridemo opens <uri>` under `AppToolLauncher`, and your app is never told. |
 | A handler test throws about a missing main dispatcher | No `Dispatchers.setMain(...)` in `@Before`. Every handler runs on the main dispatcher and a JVM test has to supply one. |
 | Your code won't compile against a coroutines type the APK clearly contains | The SDK depends on coroutines at runtime scope only. Declare `kotlinx-coroutines-core` yourself, at the SDK's version. |
 | `Ari reads this. A tool provider declares tools and returns results instead.` | You reached into `com.ari_os.ari.sdk.protocol` for Ari's half of the wire. The opt-in marker is the SDK telling you there is a partner-facing way to do the same thing. |
 
 ```bash
-adb logcat -d | grep -iE "AppToolRegistry|tool provider|appTools"
+adb logcat -s AvailableAriToolsRepository AppToolDeclarationReader AppToolLauncher
 ```
 
-A healthy session logs `Discovered 1 app tool provider(s)`.
+Ari logs under its class name. Ari reads declarations when it starts and again on
+each package change, and every voice session takes a snapshot of what it read, so
+an install reaches the *next* session. What you will see:
+
+- `AvailableAriToolsRepository` (debug): `Seeded N app tool provider(s)`, once,
+  when Ari itself starts. `N` counts every provider on the device, not only this
+  app.
+- `AvailableAriToolsRepository` (debug): `com.example.aridemo changed (<intent
+  action>), so Ari reads its declaration again`, when this app is installed or
+  updated while Ari runs. A healthy install shows this line.
+- `AppToolDeclarationReader` (warning, only on a problem): `Skipping
+  com.example.aridemo: <reason>` when the whole file is refused, or
+  `com.example.aridemo tool '<name>' dropped: <reason>` for a single tool.
+
+A healthy install shows the "changed" line and no `Skipping` or `dropped` warning
+for this app.
 
 ## Verified on hardware
 
@@ -279,12 +353,12 @@ one confirmation, and `show_circle` opening `aridemo://circle/3` with no bind.
 Still **not** exercised on hardware: `cancel()` and `AriToolAvailability.set`,
 the oversize caps on results and arguments, declaration version skew, saying no
 at a confirmation, an invalid enum value, the seventh-circle limit and the
-`fixWith` it now returns, and Android 16 background-launch rules. The permission
-gate is the one thing no JVM test here can cover either: the stubbed
-`android.jar` makes it a no-op.
+`fixWith` it now returns, and Android 16 background-launch rules. No test here
+exercises the permission gate either: the handler tests run against the stubbed
+`android.jar`, where it is a no-op.
 
 Two caveats on that run, and they have grown. It predates the generated asset.
-It also predates the current AAR: the headset ran an earlier SDK build than the
+It also predates the current AAR: the device ran an earlier SDK build than the
 one `sdk-repo/` now holds, and the newer one split the SDK's packages, renamed
 its error codes and removed launch results altogether. `compileSdk` has moved
 35 -> 36 as well. Read the run as evidence that the wire works end to end, not

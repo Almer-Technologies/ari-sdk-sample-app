@@ -9,7 +9,8 @@ package com.example.aridemo
  * scheme and host stop matching [SCHEME] and [HOST].
  *
  * Parsed with a regex rather than `android.net.Uri`, because `Uri` is stubbed to
- * return null in a JVM unit test and this app runs no Robolectric.
+ * return null in a plain JVM unit test, and `CircleDeeplinkTest` checks the
+ * parser there, without Robolectric.
  */
 object CircleDeeplink {
 

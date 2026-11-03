@@ -7,7 +7,13 @@ plugins {
 
     // Writes assets/ari_tools.json from DemoTools on every build. Resolved from
     // sdk-repo/, which settings.gradle.kts names under pluginManagement too.
-    id("com.ari_os.ari-tools") version "0.1.0"
+    id("com.ari_os.ari-tools") version "0.1.1"
+
+    // Measures which lines and branches the unit tests reach.
+    // `:app:koverHtmlReportDebug` runs testDebugUnitTest and writes
+    // build/reports/kover/htmlDebug/index.html. No verify rule: the number is
+    // for reading, not a gate a partner's copy of this file inherits.
+    id("org.jetbrains.kotlinx.kover")
 }
 
 android {
@@ -35,8 +41,13 @@ android {
     // context is needed — but the stubbed android.jar must return defaults rather
     // than throw. Any project that unit-tests a subclass of AriToolProviderService
     // needs this; the SDK cannot set it for you.
+    //
+    // MainActivityTest runs under Robolectric, which reads the merged manifest
+    // and resources. Without isIncludeAndroidResources it sees neither: there is
+    // no MainActivity to start and no intent filter to resolve the link against.
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -68,13 +79,14 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    // Resolved from sdk-repo/, the Maven repository committed in this repo.
+    // Resolved from sdk-repo/, the Maven repository you unzipped into the project
+    // root. It is not committed in this repo.
     // Of the SDK's four dependencies only kotlin-stdlib is on the compile
     // classpath. kotlinx-serialization-json and the two coroutines artifacts are
     // runtime scope, because the SDK keeps coroutines out of its public API — so
     // they are on the APK's classpath but no source here can NAME a type from
     // them through this dependency. See kotlinx-coroutines-core below.
-    implementation("com.ari_os:ari-tool-sdk:0.1.0")
+    implementation("com.ari_os:ari-tool-sdk:0.1.1")
 
     // CircleState holds its circles in a MutableStateFlow, so a main source names
     // a coroutines type and has to declare it. Without this line it still
@@ -93,7 +105,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 
-    // AriToolHandlerTest parses each result envelope with JSONObject, and the
+    // AriToolHandlerTest parses each result JSON with JSONObject, and the
     // android unit-test jar stubs org.json into returning defaults, so the real
     // implementation has to come from the test classpath. On a device org.json
     // ships in the framework, so this never reaches the APK.
@@ -104,4 +116,20 @@ dependencies {
     // test dispatcher. Version matched to the coroutines version above, so the
     // test dispatcher and the runtime agree.
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
+
+    // MainActivityTest starts the real activity with a deeplink and reads its
+    // Compose screen, which needs an Android runtime a plain JVM test lacks.
+    // Robolectric supplies one and runs at targetSdk 35; it fetches its Android
+    // runtime jar from Maven Central the first time it runs.
+    testImplementation("org.robolectric:robolectric:4.16.1")
+
+    // Finds and asserts on the activity's Compose nodes. Same BOM as the app, so
+    // the test reads the Compose version the APK ships.
+    testImplementation(platform("androidx.compose:compose-bom:2025.08.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+
+    // MainActivityTest names ApplicationProvider, so it declares the artifact
+    // rather than lean on Robolectric's transitive copy — the same rule as
+    // kotlinx-coroutines-core above. 1.5.0 is the version Robolectric resolves.
+    testImplementation("androidx.test:core:1.5.0")
 }

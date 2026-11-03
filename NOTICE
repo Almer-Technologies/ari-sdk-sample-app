@@ -17,4 +17,6 @@ They are proprietary software of RealWear, Inc. They are not distributed in
 this repository. They are supplied separately, and your use of them is
 governed solely by your written agreement with RealWear, Inc.
 
-To obtain them, contact info@realwear.com.
+This branch requires matching unreleased SDK and Gradle plugin 0.1.1 artifacts.
+See README.md, "Build and install", for the authorized local build recipe.
+The existing public 0.1.0 zip does not satisfy this branch's build pins.
