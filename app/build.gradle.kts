@@ -94,7 +94,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 
-    // AriToolHandlerTest parses each result envelope with JSONObject, and the
+    // AriToolHandlerTest parses each result JSON with JSONObject, and the
     // android unit-test jar stubs org.json into returning defaults, so the real
     // implementation has to come from the test classpath. On a device org.json
     // ships in the framework, so this never reaches the APK.

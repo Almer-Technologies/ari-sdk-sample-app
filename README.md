@@ -69,10 +69,12 @@ all the model has to choose with.
 
 **Ari narrates before it knows.** The model often says "adding it" before reading
 the tool result, so a failure can be spoken as a success. Return the right error
-code, and don't rely on the user hearing the difference. The host starts with
-known-code English text, then retains an optional partner explanation after
-sanitizing hidden characters and flattening whitespace. Ari rephrases the result in the user's language; the English text
-is not a promise of exact spoken words. The same hazard has a quieter form on
+code, and don't rely on the user hearing the difference. From the Ari release
+after 2.5.4366, the host starts with known-code English text, then retains an
+optional partner explanation ("The app said: ...") after sanitizing hidden
+characters and flattening whitespace. Ari 2.5.4366 drops the partner text, and
+the model hears only the fixed sentence. Ari rephrases the result in the user's
+language; the English text is not a promise of exact spoken words. The same hazard has a quieter form on
 a *successful* call: asking
 `remove_circles_by_color` for a colour no circle has removes nothing, which is a
 success, so the result says `"removed": 0` and the description tells the model
@@ -121,9 +123,10 @@ declaration may therefore **name** an Android type — `supportedNames()` reads 
 map of Compose `Color`, a value class over a `ULong` — but must not **call** a
 framework method. Keep those in the handlers; the generator names the cause.
 
-At session start Ari opens that asset straight out of this app's installed APK —
-no IPC, no app launch — and tells the cloud the tools exist. When you ask for
-one, the call arrives over AIDL and the SDK dispatches it to the `handle { }`
+Ari opens that asset straight out of this app's installed APK — no IPC, no app
+launch — when Ari starts and on each package change, and tells the cloud the
+tools exist. A voice session takes a snapshot of what Ari read when the session
+starts. When you ask for one, the call arrives over AIDL and the SDK dispatches it to the `handle { }`
 block declared with that tool.
 
 Every rule a declaration has to satisfy runs as `ariTools { }` builds the
@@ -133,7 +136,10 @@ argument fails `:app:assembleDebug` rather than going quiet. What can still
 vanish without a word is version skew: an Ari older than an argument type
 refuses that value and drops the one tool using it. The file's
 `declarationVersion` deliberately stays put when a type is added, so your other
-tools keep loading.
+tools keep loading. The rules only the cloud checks also fail silently, for
+example the application ID pattern: it must start with a lowercase letter,
+then lowercase letters, digits, underscores and dots, at most 128 characters.
+The cloud then drops every tool of the app.
 
 `show_circle` is the exception. It is a **deeplink tool**: a `uri` and no
 handler, so Ari never binds the service and this app's process is never started
@@ -151,10 +157,11 @@ is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 
 **This branch requires unreleased SDK and Gradle plugin 0.1.1.** Both must
 come from the same SDK build. The public 0.1.0 zip does **not** satisfy these
-pins. Obtain a matching 0.1.1 repository from RealWear, or, with authorized
+pins. This branch stays a draft and merges together with the SDK 0.1.1 release.
+Obtain a matching 0.1.1 repository from RealWear, or, with authorized
 access to the SDK feature branch, build one locally:
 
-At SDK commit `251b4549f`, the version catalog still says 0.1.0. For this
+At SDK commit `2bb5084bf`, the version catalog still says 0.1.0. For this
 local compatibility build, save this init script outside either repository as
 `/tmp/ari-local-011.init.gradle`. It overrides publication coordinates only:
 
@@ -172,7 +179,7 @@ gradle.projectsEvaluated {
 ```
 
 ```bash
-# Run inside the SDK repository at 251b4549f.
+# Run inside the SDK repository at 2bb5084bf.
 # SAMPLE_ROOT is the absolute path to this sample checkout.
 ./gradlew -I /tmp/ari-local-011.init.gradle :libs:ari-tool-sdk:publishToMavenLocal \
   :libs:ari-tool-gradle-plugin:publishToMavenLocal \
@@ -285,7 +292,7 @@ unaffected — the SDK's own `minSdk` is 30.
 Two more settings, needed only if you unit-test your `AriToolProviderService`
 subclass on the JVM: `testOptions { unitTests.isReturnDefaultValues = true }`,
 or the stubbed `android.jar` throws instead of returning defaults, and
-`testImplementation("org.json:json:...")`, or a result comes back empty.
+`testImplementation("org.json:json:...")`, or `invokeToolInTest` throws `IllegalStateException` ("reported no result").
 
 `BUILT_FROM.txt`, which comes inside `sdk-repo/`, records which build the AAR and
 the plugin came from. When the RealWear Maven repository exists, `sdk-repo/`
