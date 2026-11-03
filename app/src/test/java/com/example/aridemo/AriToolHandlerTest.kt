@@ -302,6 +302,48 @@ class AriToolHandlerTest {
         )
     }
 
+    /**
+     * JSON null counts as absent, so it means every circle, the same as leaving
+     * `number` out.
+     */
+    @Test
+    fun `set_circle_color with a null number recolours every circle`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        val payload = ok(invoke("set_circle_color", """{"color":"pink","number":null}"""))
+
+        assertEquals(3, payload.int("changed"))
+        assertEquals(
+            listOf("pink", "pink", "pink"),
+            CircleState.circles.value.map { circle -> circle.colorName },
+        )
+    }
+
+    /**
+     * Absent `number` means every circle, so a lenient read that turned an
+     * unreadable value into null would recolour all of them and report success.
+     * Present but not a whole number has to be refused, and change nothing.
+     */
+    @Test
+    fun `set_circle_color with a number that is not a whole number changes nothing`() {
+        ok(invoke("add_circle", """{"color":"green"}"""))
+        ok(invoke("add_circle", """{"color":"blue"}"""))
+
+        listOf("\"two\"", "2.5", "true").forEach { number ->
+            val failure = failure(
+                invoke("set_circle_color", """{"color":"pink","number":$number}"""),
+            )
+
+            assertEquals(number, AriToolErrorCode.INVALID_ARGUMENT.wireValue, failure.code)
+            assertEquals(number, "arg 'number' is not an int", failure.message)
+        }
+        assertEquals(
+            listOf("red", "green", "blue"),
+            CircleState.circles.value.map { circle -> circle.colorName },
+        )
+    }
+
     /** "Change circle 3 to yellow" must leave every other circle as it was. */
     @Test
     fun `set_circle_color with a number recolours only that circle`() {

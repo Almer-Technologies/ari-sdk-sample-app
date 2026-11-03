@@ -2,6 +2,7 @@ package com.example.aridemo
 
 import com.ari_os.ari.sdk.AriToolErrorCode
 import com.ari_os.ari.sdk.AriToolResult
+import com.ari_os.ari.sdk.ToolArgs
 import com.ari_os.ari.sdk.declaration.AriToolDeclarations
 import com.ari_os.ari.sdk.declaration.ariTools
 
@@ -150,6 +151,14 @@ object DemoTools : AriToolDeclarations {
          * idempotent tool. Copy the question, not the answer: an optional argument
          * whose absence widens what one call reaches is the shape to set
          * `confirm = true` on once what it overwrites is real.
+         *
+         * The same shape decides how `number` is read. `intOrNull` returns null
+         * both when the key is absent and when it holds "three", 2.5 or `true`,
+         * so it cannot tell absent from unreadable, and here null means every
+         * circle: a bad value would become the widest call this tool makes, and
+         * report success. [intIfPresent] keeps absent (or JSON null) as every
+         * circle and hands anything present to the strict accessor, which the
+         * SDK turns into invalid_argument before a circle changes.
          */
         tool(
             name = "set_circle_color",
@@ -167,7 +176,7 @@ object DemoTools : AriToolDeclarations {
                 description = "The circle's permanent number. Leave out to recolour all of them.",
             )
             handle { args ->
-                setCircleColor(args.string("color"), args.intOrNull("number"))
+                setCircleColor(args.string("color"), args.intIfPresent("number"))
             }
         }
 
@@ -291,6 +300,12 @@ object DemoTools : AriToolDeclarations {
             putInt("changed", changed)
         }
     }
+
+    /**
+     * Null only when [key] is absent or JSON null; any other value goes through
+     * the strict [ToolArgs.int], which throws on one that is not a whole number.
+     */
+    private fun ToolArgs.intIfPresent(key: String): Int? = if (has(key)) int(key) else null
 
     private fun listCircles(): AriToolResult {
         val circles = CircleState.circles.value
