@@ -6,8 +6,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 
     // Writes assets/ari_tools.json from DemoTools on every build. Resolved from
-    // sdk-repo/, which settings.gradle.kts names under pluginManagement too.
-    id("com.ari_os.ari-tools") version "0.1.1"
+    // Maven Central through pluginManagement in settings.gradle.kts.
+    id("com.ari-os.ari-tools") version "0.1.1"
 
     // Measures which lines and branches the unit tests reach.
     // `:app:koverHtmlReportDebug` runs testDebugUnitTest and writes
@@ -79,14 +79,13 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    // Resolved from sdk-repo/, the Maven repository you unzipped into the project
-    // root. It is not committed in this repo.
+    // Resolved from Maven Central.
     // Of the SDK's four dependencies only kotlin-stdlib is on the compile
     // classpath. kotlinx-serialization-json and the two coroutines artifacts are
     // runtime scope, because the SDK keeps coroutines out of its public API — so
     // they are on the APK's classpath but no source here can NAME a type from
     // them through this dependency. See kotlinx-coroutines-core below.
-    implementation("com.ari_os:ari-tool-sdk:0.1.1")
+    implementation("com.ari-os:ari-tool-sdk:0.1.1")
 
     // CircleState holds its circles in a MutableStateFlow, so a main source names
     // a coroutines type and has to declare it. Without this line it still

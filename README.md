@@ -2,14 +2,13 @@
 
 A minimal Android app that exposes six tools to Ari.
 
-**The Ari App Tools SDK is not in this repository.** This branch requires
-unreleased 0.1.1 artifacts. What is here is the
+**The Ari App Tools SDK is not part of this repository.** What is here is the
 sample's own source, under the Apache License 2.0. The SDK and its Gradle plugin
-are proprietary RealWear software, supplied separately in a Maven repository
-folder named `sdk-repo/`. See [NOTICE](NOTICE), and [Build and install](#build-and-install)
-for matching artifacts.
+are RealWear software with their own terms, and Gradle downloads them from Maven
+Central (`com.ari-os`, version 0.1.1). See [NOTICE](NOTICE), and
+[Build and install](#build-and-install).
 
-With matching artifacts, build it, install it, and say:
+Build it, install it, and say:
 
 > "Hey Ari, add a blue circle"
 
@@ -112,7 +111,7 @@ Three things, and you write all three:
    still compile with a typo and then drop the provider at runtime, silently.
 
 **`assets/ari_tools.json` is generated, and never committed.** The
-`com.ari_os.ari-tools` Gradle plugin — an `id(...)` and an `ariTools { }` block
+`com.ari-os.ari-tools` Gradle plugin — an `id(...)` and an `ariTools { }` block
 in `app/build.gradle.kts` — registers one task per variant that runs `DemoTools`
 and writes the file under `build/`, wired in as a generated assets folder so it
 always precedes `mergeAssets`.
@@ -157,45 +156,8 @@ is required, `CATEGORY_BROWSABLE` is deliberately absent, and the activity is
 
 ## Build and install
 
-**This branch requires unreleased SDK and Gradle plugin 0.1.1.** Both must
-come from the same SDK build. The public 0.1.0 zip does **not** satisfy these
-pins. This branch stays a draft and merges together with the SDK 0.1.1 release.
-Obtain a matching 0.1.1 repository from RealWear, or, with authorized
-access to the SDK feature branch, build one locally:
-
-At SDK commit `2bb5084bf`, the version catalog still says 0.1.0. For this
-local compatibility build, save this init script outside either repository as
-`/tmp/ari-local-011.init.gradle`. It overrides publication coordinates only:
-
-```groovy
-gradle.projectsEvaluated {
-    [':libs:ari-tool-sdk', ':libs:ari-tool-gradle-plugin'].each { path ->
-        def target = gradle.rootProject.findProject(path)
-        if (target == null) return
-        target.version = '0.1.1'
-        target.publishing.publications.withType(org.gradle.api.publish.maven.MavenPublication).configureEach {
-            version = '0.1.1'
-        }
-    }
-}
-```
-
-```bash
-# Run inside the SDK repository at 2bb5084bf.
-# SAMPLE_ROOT is the absolute path to this sample checkout.
-./gradlew -I /tmp/ari-local-011.init.gradle :libs:ari-tool-sdk:publishToMavenLocal \
-  :libs:ari-tool-gradle-plugin:publishToMavenLocal \
-  -Dmaven.repo.local="$SAMPLE_ROOT/sdk-repo"
-```
-
-Use JDK 21 and the SDK repository's Android SDK setup. These publication tasks
-write the AAR, plugin JAR, plugin marker and Maven metadata into `sdk-repo/`
-beside this sample's `settings.gradle.kts`. Record the SDK commit, build command
-and artifact checksums in ignored `sdk-repo/BUILT_FROM.txt`. Keep this repository
-private to your local build; never commit its contents or publish these binaries.
-The existing public 0.1.0 download remains unchanged.
-
-Then, from this sample:
+The SDK and its Gradle plugin come from Maven Central, so there is nothing to
+download or copy first:
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -205,8 +167,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 The build needs JDK 21 and an Android SDK with **API 36** — either an `sdk.dir`
 in `local.properties` or `ANDROID_HOME` in the environment. No module declares a
 Gradle toolchain, so the JDK Gradle runs on is the one that compiles the code.
-Nothing is fetched over the network for the SDK or the plugin: both resolve out
-of `sdk-repo/` on disk. To run every check:
+Both `com.ari-os:ari-tool-sdk:0.1.1` and the `com.ari-os.ari-tools` plugin
+resolve over the network from Maven Central. To run every check:
 
 ```bash
 ./gradlew :app:testDebugUnitTest
@@ -215,22 +177,19 @@ of `sdk-repo/` on disk. To run every check:
 For line and branch coverage, `./gradlew :app:koverHtmlReportDebug` runs the
 same tests and writes the report to `app/build/reports/kover/htmlDebug/index.html`.
 
-`scripts/package-release.sh` builds the partner archive,
+`scripts/package-release.sh` builds a source archive,
 `build/dist/ari-tool-sample-<version>.zip`, taking the version from
-`versionName` in `app/build.gradle.kts`, the source file list from git and
-`sdk-repo/` off disk. That archive is one self-contained project: unpack it into
-an empty directory and it builds, because the SDK is in there. Running the
-script needs `sdk-repo/`, for the same reason building does.
+`versionName` in `app/build.gradle.kts` and the file list from git. Unpack it
+into an empty directory and it builds the same way, with the SDK fetched from
+Maven Central.
 
-`.github/workflows/build.yml` runs on `ubuntu-latest`. Two checks always run —
-that no SDK binary and no generated `ari_tools.json` have been committed — and
-the build and tests run only where `sdk-repo/` is present, which a clone of this
-repository alone is not. Where they do run, the workflow reads
-`assets/ari_tools.json` back out of the built APK and diffs it against what the
-plugin wrote, proving the declaration reached the APK byte for byte. It cannot
-detect an upstream SDK change breaking a partner: nothing here rebuilds the SDK,
-so a green run proves the sample works against *the AAR that was supplied* — the
-exact artifact you get.
+`.github/workflows/build.yml` runs on `ubuntu-latest`. It checks that no
+generated `ari_tools.json` has been committed, builds the app, runs the unit
+tests, reads `assets/ari_tools.json` back out of the built APK and diffs it
+against what the plugin wrote, proving the declaration reached the APK byte for
+byte. It cannot detect an upstream SDK change breaking a partner: nothing here
+rebuilds the SDK, so a green run proves the sample works against *the released
+0.1.1 artifacts* — the exact ones you get.
 
 On the device, the **Ari app must be installed** — it defines the permission
 this app's service requires. Ari reads declarations when it starts and on each
@@ -239,24 +198,23 @@ installing this app mid-conversation leaves it invisible: restart the session.
 
 ## Pointing your own project at the SDK
 
-Copy `sdk-repo/` in; `settings.gradle.kts` here is the template. The one thing
-to copy exactly is that it names the folder **twice**: `pluginManagement` and
+`settings.gradle.kts` here is the template. The one thing to copy exactly is that
+`mavenCentral()` appears **twice**: `pluginManagement` and
 `dependencyResolutionManagement` resolve from separate lists, so a project with
-only the second one compiles the SDK and cannot find the plugin. (This project
-guards each entry with an `isDirectory` check and then fails with a sentence
-naming the folder. That is only so a reader who cloned the sample without the
-SDK gets told what is missing; your own project, which always has the folder,
-does not need it.)
+only the second one compiles the SDK and cannot find the plugin.
 
 ```kotlin
 // settings.gradle.kts, in BOTH repository lists
-maven { url = uri(settingsDir.resolve("sdk-repo")) }
+mavenCentral()
 
 // app/build.gradle.kts
-plugins { id("com.ari_os.ari-tools") version "0.1.1" }
+plugins { id("com.ari-os.ari-tools") version "0.1.1" }
 ariTools { declarations = "com.example.myapp.MyTools" }
-dependencies { implementation("com.ari_os:ari-tool-sdk:0.1.1") }
+dependencies { implementation("com.ari-os:ari-tool-sdk:0.1.1") }
 ```
+
+The Maven group is `com.ari-os` (with a hyphen), but the Kotlin packages stay
+`com.ari_os.*`, so imports are unchanged.
 
 What you import sits in two packages. `com.ari_os.ari.sdk.declaration` holds
 what you declare tools with — `AriToolDeclarations`, `ariTools { }`,
@@ -271,12 +229,11 @@ here use to run a tool through the service. In SDK 0.1.0 it was in
 `com.ari_os.ari.sdk`, so the tests here build only against 0.1.1.
 
 **The SDK brings its own dependencies — but only one of them to your compiler.**
-`sdk-repo/` is a Maven repository, not a folder of loose files, so Gradle reads
-the metadata beside the AAR and puts all four of `kotlin-stdlib`,
-`kotlinx-serialization-json`, `kotlinx-coroutines-core` and
-`kotlinx-coroutines-android` on the runtime classpath. That is why it is a
-`maven { }` entry and not `flatDir`: a bare AAR carries no metadata, so a
-`flatDir` project compiles and then dies with `NoClassDefFoundError`.
+Gradle reads the POM published beside the AAR and puts all four of
+`kotlin-stdlib`, `kotlinx-serialization-json`, `kotlinx-coroutines-core` and
+`kotlinx-coroutines-android` on the runtime classpath. A bare AAR copied into
+`libs/` or a `flatDir` carries no such metadata, so that project compiles and
+then dies with `NoClassDefFoundError`.
 
 Only `kotlin-stdlib` reaches the **compile** classpath. The SDK keeps coroutines
 out of its public API deliberately, so the other three are runtime scope: they
@@ -298,10 +255,6 @@ Two more settings, needed only if you unit-test your `AriToolProviderService`
 subclass on the JVM: `testOptions { unitTests.isReturnDefaultValues = true }`,
 or the stubbed `android.jar` throws instead of returning defaults, and
 `testImplementation("org.json:json:...")`, or `invokeToolInTest` throws `IllegalStateException` ("reported no result").
-
-`BUILT_FROM.txt`, which comes inside `sdk-repo/`, records which build the AAR and
-the plugin came from. When the RealWear Maven repository exists, `sdk-repo/`
-becomes its URL and nothing else above changes.
 
 Tool `timeout` takes a Kotlin `Duration`, for example `timeout = 30.seconds`
 with `import kotlin.time.Duration.Companion.seconds`. This sample uses the SDK
@@ -359,16 +312,17 @@ exercises the permission gate either: the handler tests run against the stubbed
 
 Two caveats on that run, and they have grown. It predates the generated asset.
 It also predates the current AAR: the device ran an earlier SDK build than the
-one `sdk-repo/` now holds, and the newer one split the SDK's packages, renamed
-its error codes and removed launch results altogether. `compileSdk` has moved
+one on Maven Central now (0.1.1), and the newer one split the SDK's packages,
+renamed its error codes and removed launch results altogether. `compileSdk` has moved
 35 -> 36 as well. Read the run as evidence that the wire works end to end, not
 that this tree has been on a device.
 
 ## Licence
 
-The sample in this repository — everything except `sdk-repo/` — is licensed
-under the Apache License 2.0. See [LICENSE](LICENSE).
+The sample in this repository is licensed under the Apache License 2.0. See
+[LICENSE](LICENSE).
 
 The Ari App Tools SDK and its Gradle plugin are **not** covered by that licence.
-They are proprietary RealWear software, supplied separately under a written
-agreement, and they are not distributed here. See [NOTICE](NOTICE).
+They are proprietary RealWear software, governed solely by your written agreement
+with RealWear, and they are not distributed in this repository. Gradle downloads
+them from Maven Central. See [NOTICE](NOTICE).
