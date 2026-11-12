@@ -10,11 +10,9 @@ The Ari App Tools SDK is NOT licensed under the Apache License, Version 2.0,
 and the LICENSE file in this repository grants no rights in it. Specifically,
 these artifacts are excluded:
 
-    com.ari_os:ari-tool-sdk
-    com.ari_os:ari-tool-gradle-plugin
+    com.ari-os:ari-tool-sdk
+    com.ari-os:ari-tool-gradle-plugin
 
 They are proprietary software of RealWear, Inc. They are not distributed in
-this repository. They are supplied separately, and your use of them is
-governed solely by your written agreement with RealWear, Inc.
-
-To obtain them, contact info@realwear.com.
+this repository. The build downloads them from Maven Central, and your use of
+them is governed solely by your written agreement with RealWear, Inc.

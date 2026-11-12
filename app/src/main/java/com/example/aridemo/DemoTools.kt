@@ -2,6 +2,7 @@ package com.example.aridemo
 
 import com.ari_os.ari.sdk.AriToolErrorCode
 import com.ari_os.ari.sdk.AriToolResult
+import com.ari_os.ari.sdk.ToolArgs
 import com.ari_os.ari.sdk.declaration.AriToolDeclarations
 import com.ari_os.ari.sdk.declaration.ariTools
 
@@ -34,10 +35,13 @@ import com.ari_os.ari.sdk.declaration.ariTools
  * it was decided or overlooked. Nothing verifies who declared it.
  *
  * `fixWith` goes the other way: exactly one failure here names one, and the rest
- * name nothing on purpose. Ari puts the named tool in front of the user, so the
- * field is only worth setting where that tool really does repair the call. See
- * [addCircle] for the one that does, and [unknownColor] and [noSuchCircle] for
- * the two that have nothing honest to offer.
+ * name nothing on purpose. Ari's cloud appends "Call <full tool name> to fix
+ * this, then try again." to the error the model reads, naming the tool by the
+ * full name the model sees (here `app__com_example_aridemo__remove_circle`), so
+ * the model may call that tool, and that tool's own `confirm` flag still applies.
+ * The field is only worth setting where that tool really does repair the call.
+ * See [addCircle] for the one that does, and [unknownColor] and [noSuchCircle]
+ * for the two that have nothing honest to offer.
  */
 object DemoTools : AriToolDeclarations {
 
@@ -105,7 +109,7 @@ object DemoTools : AriToolDeclarations {
 
         /**
          * Exists to cut a count of confirmations, not to save a round trip: both
-         * removal tools prompt, so N calls means N prompts, and on a headset
+         * removal tools prompt, so N calls means N prompts, and on a device
          * "remove all the green circles" produced two of each. Clearing `confirm`
          * would have silenced the second prompt too, and been the wrong fix — how
          * often the user is asked is a property of the tool surface.
@@ -147,6 +151,14 @@ object DemoTools : AriToolDeclarations {
          * idempotent tool. Copy the question, not the answer: an optional argument
          * whose absence widens what one call reaches is the shape to set
          * `confirm = true` on once what it overwrites is real.
+         *
+         * The same shape decides how `number` is read. `intOrNull` returns null
+         * both when the key is absent and when it holds "three", 2.5 or `true`,
+         * so it cannot tell absent from unreadable, and here null means every
+         * circle: a bad value would become the widest call this tool makes, and
+         * report success. [intIfPresent] keeps absent (or JSON null) as every
+         * circle and hands anything present to the strict accessor, which the
+         * SDK turns into invalid_argument before a circle changes.
          */
         tool(
             name = "set_circle_color",
@@ -164,7 +176,7 @@ object DemoTools : AriToolDeclarations {
                 description = "The circle's permanent number. Leave out to recolour all of them.",
             )
             handle { args ->
-                setCircleColor(args.string("color"), args.intOrNull("number"))
+                setCircleColor(args.string("color"), args.intIfPresent("number"))
             }
         }
 
@@ -230,7 +242,9 @@ object DemoTools : AriToolDeclarations {
      * The full-screen refusal is the one failure here worth a `fixWith`:
      * [REMOVE_CIRCLE] frees exactly the one slot this call wants, and at
      * [CircleState.MAX_CIRCLES] there is always a circle to remove, so the tool
-     * Ari offers can always run.
+     * the model is told to call can always run. The host adds the sanitized
+     * explanation after its known-code text. The cloud tells the model to call
+     * the offered repair tool, whose confirmation still applies.
      *
      * It does take a `number`, so the repair is a step rather than a tap. That is
      * as good as this registry gets — every removal tool takes an argument — and
@@ -287,6 +301,12 @@ object DemoTools : AriToolDeclarations {
         }
     }
 
+    /**
+     * Null only when [key] is absent or JSON null; any other value goes through
+     * the strict [ToolArgs.int], which throws on one that is not a whole number.
+     */
+    private fun ToolArgs.intIfPresent(key: String): Int? = if (has(key)) int(key) else null
+
     private fun listCircles(): AriToolResult {
         val circles = CircleState.circles.value
         return AriToolResult.ok {
@@ -300,8 +320,8 @@ object DemoTools : AriToolDeclarations {
     }
 
     /**
-     * Unreachable while the `color` enum's values and this resolver are the same
-     * list. Kept as the backstop for a value Ari sends off-list.
+     * The enum guides the model; the wire can still carry an off-list value.
+     * The host retains this explanation as sanitized data after its code text.
      */
     private fun unknownColor(color: String) = AriToolResult.error(
         AriToolErrorCode.INVALID_ARGUMENT,
@@ -310,8 +330,8 @@ object DemoTools : AriToolDeclarations {
     )
 
     /**
-     * Numbers are permanent and can have gaps, so naming the ones that do exist
-     * is what lets Ari and the user recover without another round trip.
+     * Numbers can have gaps. The host retains the sanitized list as explanation;
+     * the model can also call `list_circles` to read the current state.
      */
     private fun noSuchCircle(number: Int): AriToolResult {
         val active = CircleState.activeNumbers()
